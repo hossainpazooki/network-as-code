@@ -1,0 +1,193 @@
+{
+  "_synthetic": "CONFORMING FIXTURE - must PASS ./run.sh conforming. HAND-AUTHORED, NOT THE OUTPUT OF AN INFRACOST RUN, AND NOT A MEASUREMENT. Infracost is not installed in this environment and no INFRACOST_API_KEY is available, so no real `infracost breakdown` has ever executed against this repo. Written by hand in the real Infracost 0.10.x breakdown schema to exercise FIN-002 in policy/finops.rego. Per-resource costs are approximated from AWS public on-demand pricing for us-east-1 (NAT Gateway $0.045/hr, EKS control plane $0.10/hr, t3.medium $0.0416/hr, db.t3.small $0.034/hr, db.t3.micro $0.017/hr, gp2 storage $0.115/GB-mo, cache.t3.micro $0.017/hr) at 730 hours/month; they are illustrative only and were never checked against a live pricing API. The SYNTHETIC- element of the filename and this marker key are both load-bearing: they are the visible signal that these numbers are not measured. Do not drop either without replacing the contents with real Infracost output - see fixtures/infracost/README.md. Topology mirrors fixtures/historical/terraform/envs/dev.tfvars (single_nat_gateway = true, 3 AZs): one NAT gateway, totalMonthlyCost 221.33, under the dev ceiling of 250 in policy/budget.json.",
+  "version": "0.2",
+  "currency": "USD",
+  "projects": [
+    {
+      "name": "dev",
+      "metadata": {
+        "path": "envs/dev",
+        "type": "terraform_dir",
+        "vcsSubPath": null
+      },
+      "pastBreakdown": {
+        "resources": [],
+        "totalHourlyCost": "0",
+        "totalMonthlyCost": "0"
+      },
+      "breakdown": {
+        "resources": [
+          {
+            "name": "module.eks.aws_eks_cluster.this[0]",
+            "resourceType": "aws_eks_cluster",
+            "hourlyCost": "0.1",
+            "monthlyCost": "73.0",
+            "costComponents": [
+              {
+                "name": "EKS cluster",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.1",
+                "hourlyCost": "0.1",
+                "monthlyCost": "73.0"
+              }
+            ]
+          },
+          {
+            "name": "module.eks.module.eks_managed_node_group.aws_launch_template.this[0]",
+            "resourceType": "aws_launch_template",
+            "hourlyCost": "0.0832",
+            "monthlyCost": "60.736",
+            "costComponents": [
+              {
+                "name": "Instance usage (Linux/UNIX, on-demand, t3.medium x2)",
+                "unit": "hours",
+                "hourlyQuantity": "2",
+                "monthlyQuantity": "1460",
+                "price": "0.0416",
+                "hourlyCost": "0.0832",
+                "monthlyCost": "60.736"
+              }
+            ]
+          },
+          {
+            "name": "module.app_db.aws_db_instance.this[0]",
+            "resourceType": "aws_db_instance",
+            "hourlyCost": "0.034",
+            "monthlyCost": "24.82",
+            "costComponents": [
+              {
+                "name": "Database instance (on-demand, Single-AZ, db.t3.small)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.034",
+                "hourlyCost": "0.034",
+                "monthlyCost": "24.82"
+              },
+              {
+                "name": "Storage (general purpose SSD, gp2)",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": "20",
+                "price": "0.115",
+                "hourlyCost": null,
+                "monthlyCost": "2.30"
+              }
+            ]
+          },
+          {
+            "name": "module.temporal_db.aws_db_instance.this[0]",
+            "resourceType": "aws_db_instance",
+            "hourlyCost": "0.017",
+            "monthlyCost": "12.41",
+            "costComponents": [
+              {
+                "name": "Database instance (on-demand, Single-AZ, db.t3.micro)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.017",
+                "hourlyCost": "0.017",
+                "monthlyCost": "12.41"
+              },
+              {
+                "name": "Storage (general purpose SSD, gp2)",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": "20",
+                "price": "0.115",
+                "hourlyCost": null,
+                "monthlyCost": "2.30"
+              }
+            ]
+          },
+          {
+            "name": "aws_elasticache_replication_group.redis",
+            "resourceType": "aws_elasticache_replication_group",
+            "hourlyCost": "0.017",
+            "monthlyCost": "12.41",
+            "costComponents": [
+              {
+                "name": "ElastiCache (on-demand, cache.t3.micro)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.017",
+                "hourlyCost": "0.017",
+                "monthlyCost": "12.41"
+              }
+            ]
+          },
+          {
+            "name": "aws_ecr_repository.regulatory_workbench",
+            "resourceType": "aws_ecr_repository",
+            "hourlyCost": null,
+            "monthlyCost": "0.50",
+            "costComponents": [
+              {
+                "name": "Storage",
+                "unit": "GB",
+                "hourlyQuantity": null,
+                "monthlyQuantity": "5",
+                "price": "0.10",
+                "hourlyCost": null,
+                "monthlyCost": "0.50"
+              }
+            ]
+          },
+          {
+            "name": "module.vpc.aws_nat_gateway.this[0]",
+            "resourceType": "aws_nat_gateway",
+            "hourlyCost": "0.045",
+            "monthlyCost": "32.85",
+            "costComponents": [
+              {
+                "name": "NAT gateway (single, single_nat_gateway=true)",
+                "unit": "hours",
+                "hourlyQuantity": "1",
+                "monthlyQuantity": "730",
+                "price": "0.045",
+                "hourlyCost": "0.045",
+                "monthlyCost": "32.85"
+              }
+            ]
+          }
+        ],
+        "totalHourlyCost": "0.3032",
+        "totalMonthlyCost": "221.33"
+      },
+      "diff": {
+        "resources": [],
+        "totalHourlyCost": "0.3032",
+        "totalMonthlyCost": "221.33"
+      },
+      "summary": {
+        "totalDetectedResources": 7,
+        "totalSupportedResources": 7,
+        "totalUnsupportedResources": 0,
+        "totalUsageBasedResources": 0,
+        "totalNoPriceResources": 0,
+        "unsupportedResourceCounts": {},
+        "noPriceResourceCounts": {}
+      }
+    }
+  ],
+  "totalHourlyCost": "0.3032",
+  "totalMonthlyCost": "221.33",
+  "pastTotalHourlyCost": "0",
+  "pastTotalMonthlyCost": "0",
+  "diffTotalHourlyCost": "0.3032",
+  "diffTotalMonthlyCost": "221.33",
+  "timeGenerated": "2026-08-24T00:00:00Z",
+  "summary": {
+    "totalDetectedResources": 7,
+    "totalSupportedResources": 7,
+    "totalUnsupportedResources": 0,
+    "totalUsageBasedResources": 0,
+    "totalNoPriceResources": 0,
+    "unsupportedResourceCounts": {},
+    "noPriceResourceCounts": {}
+  }
+}

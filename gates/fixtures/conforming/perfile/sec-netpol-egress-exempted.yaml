@@ -1,0 +1,26 @@
+# Conforming: egress ipBlock is 0.0.0.0/0 (broader than the VPC CIDR), but
+# the policy carries a non-empty exemption annotation, so SEC-002 is
+# suppressed. This is the deliberate internet-egress shape from
+# fixtures/historical/kube/base/egress-common.yaml's HTTPS rule, made
+# explicit the way the gate demands.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-common
+  annotations:
+    policy.hossainpazooki.dev/egress-exemption: "reviewed 2026-08-24: AWS API egress (Secrets Manager, S3, ECR, CloudWatch), see ADR-0031"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

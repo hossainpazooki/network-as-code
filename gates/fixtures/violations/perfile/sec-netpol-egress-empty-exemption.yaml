@@ -1,0 +1,19 @@
+# Violation: SEC-002 - egress ipBlock 0.0.0.0/0, exemption annotation present
+# but EMPTY - an empty value does not exempt.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-common
+  annotations:
+    policy.hossainpazooki.dev/egress-exemption: ""
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

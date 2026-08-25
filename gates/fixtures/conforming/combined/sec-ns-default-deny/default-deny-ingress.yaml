@@ -1,0 +1,11 @@
+# A real default-deny-ingress policy: Ingress policyType, empty podSelector
+# (selects all pods in the namespace), no ingress rules -> denies all ingress
+# by default. This is what satisfies SEC-003 alongside an Egress policy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

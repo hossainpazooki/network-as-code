@@ -1,0 +1,17 @@
+# Violation: SEC-002 - egress ipBlock 10.0.0.0/8 is broader than the declared
+# VPC CIDR 10.0.0.0/16, no exemption annotation present.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-common
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 5432

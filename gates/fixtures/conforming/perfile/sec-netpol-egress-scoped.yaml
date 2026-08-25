@@ -1,0 +1,17 @@
+# Conforming: egress ipBlock is contained within the declared VPC CIDR
+# (10.0.0.0/16), so SEC-002 stays silent with no exemption needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-app-db
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.1.0/24
+      ports:
+        - protocol: TCP
+          port: 5432
