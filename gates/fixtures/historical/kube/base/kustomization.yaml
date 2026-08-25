@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: institutional-defi
+
+# The api/worker workloads (and their service account, ExternalSecret, HPAs and
+# PDBs) were removed when institutional-defi-platform-api was decommissioned.
+resources:
+  - namespace.yaml
+  - regulatory-workbench-deployment.yaml
+  - regulatory-workbench-service.yaml
+  - egress-common.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: institutional-defi-platform
+  app.kubernetes.io/managed-by: kustomize

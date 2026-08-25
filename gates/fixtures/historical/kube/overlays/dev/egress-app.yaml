@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-app
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow Temporal (dev namespace)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: temporal-dev
+      ports:
+        - protocol: TCP
+          port: 7233

@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: institutional-defi-ingress
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:547729607601:certificate/c71040ef-6eac-48d5-828f-27451bde6f00
+    # Was /health (the decommissioned API's probe); the workbench serves / only.
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/group.name: institutional-defi-dev
+spec:
+  ingressClassName: alb
+  rules:
+    - host: dev.hossainpazooki.com
+      http:
+        paths:
+          # Frontend apps (path-based routing, longest prefix wins).
+          # The /v2/ws and / routes to api-dev:8000 were removed when
+          # institutional-defi-platform-api was decommissioned; / is now unrouted.
+          - path: /workbench
+            pathType: Prefix
+            backend:
+              service:
+                name: regulatory-workbench-dev
+                port:
+                  number: 80

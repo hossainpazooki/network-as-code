@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: regulatory-workbench
+  labels:
+    app: regulatory-workbench
+    app.kubernetes.io/name: regulatory-workbench
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: regulatory-workbench
+  template:
+    metadata:
+      labels:
+        app: regulatory-workbench
+    spec:
+      containers:
+        - name: regulatory-workbench
+          image: institutional-defi-regulatory-workbench:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false

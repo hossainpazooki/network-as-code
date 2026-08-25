@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Vendored evidence: never normalise, or the blob-SHA provenance check breaks.
+gates/fixtures/historical/** -text
