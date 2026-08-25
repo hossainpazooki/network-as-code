@@ -1,0 +1,170 @@
+# Fail-closed policy gate. Mirrors ./run.sh, one job per target.
+#
+# ABSOLUTE RULE for this file: no exit-code suppression of any kind - no
+# or-true suffix, no continue-on-error, no "if: always()" rescue on a failing
+# step. The repo this gate audits shipped a Checkov scan whose two scan steps
+# suppressed their exit code that way (infra-security-scan.yml lines 26 and 43),
+# so the scan could never fail the build. Correcting that anti-pattern is the
+# point of this repo; re-committing it here would be self-refuting. The
+# historical self-audit is EXPECTED to produce findings, so "run.sh historical"
+# asserts an EXACT finding count and exits non-zero on drift in either
+# direction.
+#
+# Zero credentials: no secrets, no AWS, no terraform init/plan/apply, no
+# Infracost API call. Nothing here can spend money or mutate infrastructure.
+
+name: gate
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: gates
+
+env:
+  CONFTEST_VERSION: "0.69.0"
+  OPA_VERSION: "1.19.1"
+  # Digest of conftest_0.69.0_Linux_x86_64.tar.gz as published in the release's
+  # own checksums.txt. That file was corroborated offline: its Windows asset
+  # line matches the sha256 of the binary this repo was actually built with.
+  # The install step requires BOTH that the download matches checksums.txt AND
+  # that checksums.txt still publishes this exact value.
+  CONFTEST_LINUX_SHA256: "96fc2fbf11f0afde51256647127e6f00a64ce839a4d9a0a1aef2426c0e6f4b3f"
+
+jobs:
+  verify-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: run.sh verify-provenance
+        run: ./run.sh verify-provenance
+
+  unit:
+    needs: verify-provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: run.sh unit
+        run: ./run.sh unit
+
+  conforming:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: run.sh conforming
+        run: ./run.sh conforming
+
+  violations:
+    needs: conforming
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      # Every violation fixture must be REFUSED. run.sh exits 1 the moment one
+      # is accepted - that negative control is the whole methodology.
+      - name: run.sh violations
+        run: ./run.sh violations
+
+  historical:
+    needs: violations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # run.sh's count_failures helper shells out to `python`.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      # The self-audit finds real problems in the vendored config on purpose.
+      # It is NOT swallowed: run.sh compares the measured count against
+      # HISTORICAL_EXPECTED (13, defined in run.sh) and exits 1 on any
+      # difference, so a rule that silently stops firing fails this job just
+      # as loudly as a newly introduced finding does.
+      - name: run.sh historical
+        run: ./run.sh historical
