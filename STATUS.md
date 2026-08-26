@@ -9,12 +9,12 @@ number below came out of that run. Nothing here is a projection.
 | Fact | Value | How it was measured |
 |---|---|---|
 | Gate result | `GATE GREEN`, exit 0 | `./run.sh gate` |
-| Rego unit tests | 59 / 59 pass | `opa test policy tests` |
+| Rego unit tests | 66 / 66 pass | `opa test policy tests` |
 | Conforming fixtures accepted | 9 per-file + 4 combined sets | `./run.sh conforming` |
-| Negative controls refused | 17 / 17 (13 per-file + 4 combined sets) | `./run.sh violations` |
-| Rule IDs with a CI-exercised refusing fixture | 8 / 8 | `./run.sh coverage` |
+| Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
+| Rule IDs with a CI-exercised refusing fixture | 9 / 9 | `./run.sh coverage` |
 | Findings in vendored historical config | **13** (4 per-file + 9 combined) | `./run.sh historical`, exact-count assertion |
-| Vendored files provenance-verified | 22 / 22 blob SHAs | `./run.sh verify-provenance` |
+| Vendored files provenance-verified | 22 / 22 blob SHAs, and the tree holds exactly that set | `./run.sh verify-provenance` |
 
 ## Rule families
 
@@ -22,7 +22,7 @@ number below came out of that run. Nothing here is a projection.
 |---|---|---|---|
 | security | 4 - SEC-001, SEC-002, SEC-002-DRIFT, SEC-003 | 7 | refusing fixture for each ID (SEC-003 in combined mode), plus refusing unit tests |
 | observability | 2 - OBS-001, OBS-002 | 4 | refusing fixture for each ID (module form and bare-resource form) |
-| finops | 2 - FIN-001 (combined mode), FIN-002 | 2 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing fixture (`fixtures/violations/perfile/fin-SYNTHETIC-infracost-per-az-nat.json`) plus refusing unit tests |
+| finops | 3 - FIN-001 (combined mode), FIN-002, FIN-003 | 4 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing fixture (`fixtures/violations/perfile/fin-SYNTHETIC-infracost-per-az-nat.json`) plus refusing unit tests. FIN-003: 1 refusing fixture (`fin-SYNTHETIC-infracost-broken-module-load.json`), which trips both clauses at once, plus unit tests asserting each clause fires alone |
 
 Every rule ID now has a negative control asserted by `./run.sh violations`, and
 the asymmetry that used to sit here is gone. FIN-002's over-budget fixture lived
@@ -63,6 +63,34 @@ bodies sharing one ID counts as covered when any one of them fires, so the
 SEC-001 gap above could recur in a different clause without turning the gate
 red. Catching that needs per-clause message-shape tracking, which is not built.
 
+## What running Infracost for the first time changed on 2026-08-26
+
+Two defects, both found by running the tool rather than by reading the code.
+
+1. **A failed Infracost parse is silent, costs $0.00, and exits 0.** The first
+   `infracost breakdown` against the evidence tree could not load
+   `../modules/iam/*`, priced nothing, printed "No cloud resources were
+   detected", reported `totalMonthlyCost` `"0"` — and returned exit status 0.
+   FIN-002 compares that number against a ceiling, and 0 is under every ceiling,
+   so committing that file would have produced a permanently green cost gate
+   reading a broken parse. **FIN-003** now refuses a breakdown carrying
+   `metadata.errors` or reporting zero detected resources. This is the second
+   instance of a defect class already in the ledger: a tool reporting "I could
+   not evaluate this" through the same channel it uses for "this is fine".
+
+2. **`verify-provenance` was blind to added files.** That same run wrote a 22MB,
+   822-file `.infracost/` module cache *into* `fixtures/historical/terraform/`.
+   All 22 blob SHAs still matched and the check still printed "22 files
+   verified", because it iterates the ledger, not the tree. The contamination
+   was caught only by the historical finding count moving 13 → 100 — and only by
+   luck, because the downloaded third-party modules happened to trip OBS-001. An
+   addition tripping no rule would have been committed as evidence. The check now
+   asserts the tree contains **exactly** the recorded set; a mutation test
+   confirms it fails on one added file and passes when clean.
+
+   The cache was deleted and the tree restored; `git diff` over the 22 files was
+   empty throughout, so no vendored byte was ever altered.
+
 ## The 13 historical findings
 
 Against `gates/fixtures/historical/`, vendored from
@@ -84,25 +112,49 @@ file, and the now-closed ruling OQ-1.
 
 ## Not yet - do not claim these
 
-- **The workflow has never run in GitHub Actions.** `.github/workflows/gate.yml`
-  exists and mirrors `run.sh`, but this repository has **zero commits** and no
-  remote, so no run exists to link. The gate is verified **locally only**. Two
-  things must happen before the Actions claim can be made: commit and push, and
-  reconcile the branch name (the local branch is `master`; the workflow's push
-  trigger is `main`). Until a run ID can be shown, say "runs locally".
+- **No policy rule has ever been evaluated in GitHub Actions.** The repository
+  was pushed on 2026-08-25 and the workflow fired once, run `32802416866` — and
+  failed in 13 seconds. `gates/run.sh` was committed with mode `100644`, because
+  `core.filemode=false` on the Windows box means git never records the on-disk
+  executable bit. The first job died on `./run.sh: Permission denied` (exit 126)
+  and the four jobs that actually evaluate policy — `unit`, `conforming`,
+  `violations`, `historical` — were **skipped**, since they `needs:` it. The gate
+  is verified **locally only**. Until a *green* run ID can be shown, say "runs
+  locally"; the branch-name concern noted here previously is resolved (the
+  trigger is `[main, master]`, which is why the run fired at all).
 - **Infracost: path taken is local-run-committed-output** (commit the JSON, gate
-  the committed file - no API call in CI). FIN-002 is **built and tested,
-  including a fixture the local gate refuses on every run, but has never been exercised
-  against a real Infracost run**: there is no `INFRACOST_API_KEY` in this
-  environment, `infracost` is not installed, and `infracost breakdown` has never
-  executed against this repo. Both JSON fixtures are hand-authored in the 0.10.x
-  schema and keep a `SYNTHETIC-` filename element and a `_synthetic` marker key
-  for exactly that reason. Wiring them into `./run.sh` on 2026-08-24 closed a
-  **methodology** gap, not a measurement gap: it proves the rule refuses the
-  file, and proves nothing at all about what the platform cost. The synthetic
-  fixtures are not measurements of anything, and any dollar figure this repo
-  produces today is illustrative. `gates/fixtures/infracost/README.md` holds the
-  procedure for replacing both files with real output.
+  the committed file - no API call in CI). **The committed fixtures are still
+  hand-authored and still not measurements.** Both keep their `SYNTHETIC-`
+  filename element and `_synthetic` marker key, and any dollar figure this repo
+  ships is illustrative. That is now a *decision*, not a limitation: on
+  2026-08-26 infracost v0.10.45 was installed and authenticated, and real
+  breakdowns were run. The output was deliberately **not** committed, so nothing
+  below is in the repo.
+
+  What those runs established, recorded here because it bears on claims made
+  above:
+
+  1. **The schema FIN-002 reads is correct.** `projects[].name` and
+     `projects[].breakdown.totalMonthlyCost` (a decimal *string*) were observed
+     in real v0.10.45 output. Note this is version-bound: infracost v2.x moved to
+     `projects[].project_name` and `summary.total_monthly_cost`, against which
+     FIN-002 would match nothing and silently approve every cost.
+  2. **`budget.json`'s ceilings no longer mean what they say.** dev = 250 and
+     prod = 900 were derived from the synthetic NAT-only figures (221.33 /
+     287.03). Measured reality, from a tree with the missing modules restored:
+     dev single-NAT **594.42**, dev per-AZ-NAT **660.12**, prod **853.40**. The
+     dev ceiling is therefore ~2.4x below its own baseline. Adopting real
+     fixtures requires re-deriving it (any value between 594.42 and 660.12
+     preserves the intent: single-NAT passes, per-AZ refuses). Prod's 900, long
+     labelled a placeholder, happens to sit 5.5% above measured prod.
+  3. **The evidence tree cannot reproduce those numbers.** `terraform/iam.tf`
+     sources `../modules/iam/{builder,pod,provisioner}` — nine files that exist
+     at ref `95df6ef` but sit one directory above the vendored subtree and were
+     never vendored. Without them infracost prices nothing.
+  4. **A failed parse is silent and exits 0**, which is what produced FIN-003
+     below. This is the finding that justified the day.
+
+  `gates/fixtures/infracost/README.md` holds the replacement procedure.
 
 ### Not claimable, full stop
 
