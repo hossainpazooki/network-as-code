@@ -95,3 +95,60 @@ deny contains msg if {
 		[fin002_usd(cost), project.name, env, fin002_usd(max_usd)],
 	)
 }
+
+# -----------------------------------------------------------------------------
+# FIN-003 - breakdown integrity
+#
+# DENY when a committed Infracost breakdown JSON is not a usable measurement:
+# it carries evaluation errors, or it detected no resources at all.
+#
+# WHY THIS RULE EXISTS. On 2026-08-26 `infracost breakdown` was run against
+# fixtures/historical/terraform for the first time. iam.tf sources three local
+# modules at ../modules/iam/*, which sit one directory ABOVE the vendored tree
+# and were never vendored with it. Infracost could not load them, priced
+# nothing, printed "No cloud resources were detected", reported a
+# totalMonthlyCost of "0" - and EXITED 0.
+#
+# That is the entire problem. A cost ceiling compares a number against a
+# budget; a failed parse produces the number 0; 0 is under every budget. FIN-002
+# would have approved that file forever, and the exit code raises no objection.
+# This is the same defect class as conftest's own exit code, already recorded in
+# docs/learnings/2026-08-25-conftest-exit-code-cannot-distinguish-error-from-refusal.md:
+# a tool reporting "I could not evaluate this" down the same channel it uses for
+# "this is fine".
+#
+# Both signals below are OBSERVED, not assumed:
+#   - projects[].metadata.errors  - absent on all three successful runs,
+#     present on the failed one. Shape taken from infracost's own schema:
+#     []*ProjectDiag = {code, message, data, isError}, where code 102 is
+#     diagModuleEvaluationFailure (internal/schema/project.go).
+#   - projects[].summary.totalDetectedResources - 12, 14 and 14 on the
+#     successful runs; 0 on the failed one.
+#
+# Each leg requires a key that the FIN-002 unit-test helper does not set, so
+# this rule cannot fire on the minimal {projects:[{name,breakdown}]} inputs
+# those tests construct. That is deliberate, and asserted below.
+# -----------------------------------------------------------------------------
+
+deny contains msg if {
+	some p
+	project := input.projects[p]
+	errs := project.metadata.errors
+	count(errs) > 0
+
+	msg := sprintf(
+		"FIN-003: Infracost breakdown for project %q carries %d evaluation error(s), first [code %v] %q - a cost gate reading a failed parse approves everything, because a failed parse costs $0.00",
+		[project.name, count(errs), errs[0].code, errs[0].message],
+	)
+}
+
+deny contains msg if {
+	some p
+	project := input.projects[p]
+	project.summary.totalDetectedResources == 0
+
+	msg := sprintf(
+		"FIN-003: Infracost breakdown for project %q detected zero resources - infracost exits 0 after a failed module load and reports $0.00, so this file would satisfy any budget ceiling",
+		[project.name],
+	)
+}

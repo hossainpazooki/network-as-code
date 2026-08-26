@@ -1,0 +1,63 @@
+{
+  "_synthetic": "NEGATIVE CONTROL - must be REFUSED by ./run.sh violations; the build fails if it is ever accepted. HAND-AUTHORED RECONSTRUCTION of a real failure, not the captured output of a run. On 2026-08-26 `infracost breakdown --path .` was executed against fixtures/historical/terraform with infracost v0.10.45; iam.tf sources ../modules/iam/{builder,pod,provisioner}, which live one directory above the vendored tree and were never vendored, so module loading failed, zero resources were priced, totalMonthlyCost came back \"0\" and THE PROCESS EXITED 0. This file reproduces that shape so FIN-003 has a refusing fixture. The message string is verbatim from that run; the surrounding structure and the code value 102 (diagModuleEvaluationFailure) are taken from infracost's own schema at internal/schema/project.go, where ProjectDiag is {code, message, data, isError}. It is marked SYNTHETIC- because it was written by hand rather than captured, in keeping with the convention used by the other two fixtures here - see fixtures/infracost/README.md.",
+  "version": "0.2",
+  "currency": "USD",
+  "projects": [
+    {
+      "name": "dev",
+      "metadata": {
+        "path": ".",
+        "type": "terraform_dir",
+        "vcsSubPath": null,
+        "errors": [
+          {
+            "code": 102,
+            "message": "could not load modules for path . open ../modules/iam/pod: no such file or directory",
+            "data": null,
+            "isError": true
+          }
+        ]
+      },
+      "pastBreakdown": {
+        "resources": [],
+        "totalHourlyCost": "0",
+        "totalMonthlyCost": "0"
+      },
+      "breakdown": {
+        "resources": [],
+        "totalHourlyCost": "0",
+        "totalMonthlyCost": "0"
+      },
+      "diff": {
+        "resources": [],
+        "totalHourlyCost": "0",
+        "totalMonthlyCost": "0"
+      },
+      "summary": {
+        "totalDetectedResources": 0,
+        "totalSupportedResources": 0,
+        "totalUnsupportedResources": 0,
+        "totalUsageBasedResources": 0,
+        "totalNoPriceResources": 0,
+        "unsupportedResourceCounts": {},
+        "noPriceResourceCounts": {}
+      }
+    }
+  ],
+  "totalHourlyCost": "0",
+  "totalMonthlyCost": "0",
+  "pastTotalHourlyCost": "0",
+  "pastTotalMonthlyCost": "0",
+  "diffTotalHourlyCost": "0",
+  "diffTotalMonthlyCost": "0",
+  "timeGenerated": "2026-08-26T00:00:00Z",
+  "summary": {
+    "totalDetectedResources": 0,
+    "totalSupportedResources": 0,
+    "totalUnsupportedResources": 0,
+    "totalUsageBasedResources": 0,
+    "totalNoPriceResources": 0,
+    "unsupportedResourceCounts": {},
+    "noPriceResourceCounts": {}
+  }
+}

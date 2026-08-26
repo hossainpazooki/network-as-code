@@ -138,3 +138,78 @@ test_fin002_message_has_no_format_error_even_with_an_integer_budget if {
 	contains(msg, "$287.03")
 	contains(msg, "$250.00")
 }
+
+# =============================================================================
+# FIN-003 - breakdown integrity
+#
+# The rule exists because infracost exits 0 when it fails to load modules,
+# priced nothing, and reports $0.00 - a number that satisfies every budget.
+# =============================================================================
+
+fin003_only(msgs) := {m | some m in msgs; startswith(m, "FIN-003:")}
+
+fin003_diag := {"code": 102, "message": "could not load modules for path . open ../modules/iam/pod: no such file or directory", "data": null, "isError": true}
+
+fin003_doc(meta, detected) := {"projects": [{
+	"name": "dev",
+	"metadata": meta,
+	"summary": {"totalDetectedResources": detected},
+	"breakdown": {"totalMonthlyCost": "0", "resources": []},
+}]}
+
+# --- the failure that motivated the rule: both legs fire at once -------------
+
+test_fin003_broken_module_load_is_denied if {
+	r := deny with input as fin003_doc({"path": ".", "errors": [fin003_diag]}, 0)
+	count(fin003_only(r)) == 2
+}
+
+# --- each leg must fire on its own, or one is dead code ----------------------
+
+test_fin003_errors_alone_are_denied if {
+	r := deny with input as fin003_doc({"path": ".", "errors": [fin003_diag]}, 12)
+	count(fin003_only(r)) == 1
+}
+
+test_fin003_zero_detected_alone_is_denied if {
+	r := deny with input as fin003_doc({"path": "."}, 0)
+	count(fin003_only(r)) == 1
+}
+
+# --- a healthy breakdown must pass ------------------------------------------
+
+test_fin003_healthy_breakdown_passes if {
+	r := deny with input as fin003_doc({"path": "."}, 12)
+	count(fin003_only(r)) == 0
+}
+
+test_fin003_empty_errors_array_passes if {
+	r := deny with input as fin003_doc({"path": ".", "errors": []}, 12)
+	count(fin003_only(r)) == 0
+}
+
+# --- FIN-003 must not leak into FIN-002's minimal test inputs ----------------
+#
+# fin002_project/2 builds {projects:[{name, breakdown}]} with no metadata and
+# no summary. If FIN-003 bound on those, every FIN-002 test would carry a
+# spurious second message and the two rules would be entangled. Asserted here
+# rather than assumed, because the coupling would be silent.
+
+test_fin003_does_not_fire_on_fin002_minimal_input if {
+	r := deny with input as fin002_project("dev", "221.33")
+	count(fin003_only(r)) == 0
+}
+
+# --- the zero-cost trap, stated as a test -----------------------------------
+#
+# The whole point: a broken parse reports "0", which is under the dev ceiling,
+# so FIN-002 alone ACCEPTS it. FIN-003 is what refuses it. If FIN-002 ever
+# started catching this on its own, this test would fail and the rule's
+# justification would need rewriting.
+
+test_fin003_is_what_catches_the_zero_cost_trap if {
+	broken := fin003_doc({"path": ".", "errors": [fin003_diag]}, 0)
+	r := deny with input as broken
+	count(fin002_only(r)) == 0
+	count(fin003_only(r)) > 0
+}
