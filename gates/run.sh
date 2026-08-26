@@ -250,7 +250,40 @@ t_verify_provenance() {
 		fi
 	done < "$HIST/BLOBSHAS.txt"
 	[ "$fail" -eq 0 ] || { echo "FAIL: vendored fixtures have been modified." >&2; exit 1; }
-	echo "$(wc -l < "$HIST/BLOBSHAS.txt") files verified against PROVENANCE.md."
+
+	# THE LOOP ABOVE ONLY PROVES RECORDED FILES ARE UNMODIFIED. It is blind to
+	# files that were ADDED, because it iterates the ledger, not the tree. On
+	# 2026-08-26 an `infracost breakdown` run executed inside this directory
+	# wrote a 22MB, 822-file .infracost/ module cache into the evidence tree.
+	# Every one of the 22 blob SHAs still matched. The only thing that noticed
+	# was the historical finding count, which moved 13 -> 100 - and it noticed
+	# by luck, because the downloaded third-party modules happened to trip
+	# OBS-001. An addition that tripped no rule would have gone unremarked and
+	# been committed as evidence. So the tree must contain EXACTLY the recorded
+	# set. BLOBSHAS.txt and PROVENANCE.md are the ledger itself, not evidence,
+	# and are the only permitted extras.
+	prov_tmp=${TMPDIR:-/tmp}/nac-prov.$$
+	mkdir -p "$prov_tmp"
+	awk '{print $2}' "$HIST/BLOBSHAS.txt" | sort > "$prov_tmp/recorded"
+	(cd "$HIST" && find . -type f ! -name BLOBSHAS.txt ! -name PROVENANCE.md) |
+		cut -c3- | sort > "$prov_tmp/actual"
+	comm -13 "$prov_tmp/recorded" "$prov_tmp/actual" > "$prov_tmp/extra"
+	comm -23 "$prov_tmp/recorded" "$prov_tmp/actual" > "$prov_tmp/absent"
+	if [ -s "$prov_tmp/extra" ] || [ -s "$prov_tmp/absent" ]; then
+		[ -s "$prov_tmp/extra" ] && {
+			echo "FAIL: unrecorded files present in the evidence tree ($(wc -l < "$prov_tmp/extra") of them):" >&2
+			head -10 "$prov_tmp/extra" >&2
+		}
+		[ -s "$prov_tmp/absent" ] && {
+			echo "FAIL: recorded files missing from the evidence tree:" >&2
+			cat "$prov_tmp/absent" >&2
+		}
+		rm -rf "$prov_tmp"
+		exit 1
+	fi
+	rm -rf "$prov_tmp"
+
+	echo "$(wc -l < "$HIST/BLOBSHAS.txt") files verified against PROVENANCE.md, and the tree contains exactly that set."
 }
 
 t_parse() {
