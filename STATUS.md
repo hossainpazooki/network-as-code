@@ -9,6 +9,7 @@ number below came out of that run. Nothing here is a projection.
 | Fact | Value | How it was measured |
 |---|---|---|
 | Gate result | `GATE GREEN`, exit 0 | `./run.sh gate` |
+| Same gate in CI | all 5 jobs green, run `33016125195`, 2026-08-26 | GitHub Actions, Ubuntu runner |
 | Rego unit tests | 66 / 66 pass | `opa test policy tests` |
 | Conforming fixtures accepted | 9 per-file + 4 combined sets | `./run.sh conforming` |
 | Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
@@ -91,6 +92,17 @@ Two defects, both found by running the tool rather than by reading the code.
    The cache was deleted and the tree restored; `git diff` over the 22 files was
    empty throughout, so no vendored byte was ever altered.
 
+3. **CI was red for a day and nobody could have told from the docs.** The first
+   push, 2026-08-25, produced run `32802416866`, which failed in 13 seconds:
+   `gates/run.sh` was committed with mode `100644`, because `core.filemode=false`
+   on the Windows box means git never records the on-disk executable bit. Job one
+   died on `Permission denied` (exit 126) and the four policy-evaluating jobs
+   were **skipped**, since they `needs:` it — so a full day of "the gate works"
+   rested on local runs only. Fixed by writing the mode into the index with
+   `git update-index --chmod=+x`; run `33016125195` on 2026-08-26 is green across
+   all five jobs. Note for anyone repeating this on Windows: `chmod +x` alone is
+   a no-op under `core.filemode=false`.
+
 ## The 13 historical findings
 
 Against `gates/fixtures/historical/`, vendored from
@@ -112,16 +124,11 @@ file, and the now-closed ruling OQ-1.
 
 ## Not yet - do not claim these
 
-- **No policy rule has ever been evaluated in GitHub Actions.** The repository
-  was pushed on 2026-08-25 and the workflow fired once, run `32802416866` — and
-  failed in 13 seconds. `gates/run.sh` was committed with mode `100644`, because
-  `core.filemode=false` on the Windows box means git never records the on-disk
-  executable bit. The first job died on `./run.sh: Permission denied` (exit 126)
-  and the four jobs that actually evaluate policy — `unit`, `conforming`,
-  `violations`, `historical` — were **skipped**, since they `needs:` it. The gate
-  is verified **locally only**. Until a *green* run ID can be shown, say "runs
-  locally"; the branch-name concern noted here previously is resolved (the
-  trigger is `[main, master]`, which is why the run fired at all).
+- **The gate has not yet refused anything in a pull request.** Run
+  `33016125195` proves the rules execute and refuse in CI, but it ran on a push
+  to `master` where every fixture was already in its expected state. The claim
+  "here is the gate blocking a violation from merging" needs a PR whose check
+  goes red on a deliberate violation, and no such PR exists yet.
 - **Infracost: path taken is local-run-committed-output** (commit the JSON, gate
   the committed file - no API call in CI). **The committed fixtures are still
   hand-authored and still not measurements.** Both keep their `SYNTHETIC-`

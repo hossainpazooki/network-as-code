@@ -93,12 +93,11 @@ Targets: `verify-provenance`, `unit`, `conforming`, `violations`, `combined`,
 `historical`, `parse`, `demo`, `gate`, `tools`. The same five are DEFINED as separate
 jobs in `.github/workflows/gate.yml`, triggered on push and pull request, with
 the pinned conftest 0.69.0 / OPA 1.19.1 binaries sha256-verified against the
-publishers' checksums before they are executed. That workflow has run exactly
-once, on 2026-08-25, and it failed: `gates/run.sh` was committed without its
-executable bit, so the first job exited 126 on `Permission denied` and the four
-jobs that evaluate policy never started. **No rule has yet been evaluated in
-CI**, and every result quoted here comes from a local run. Zero credentials,
-zero spend: no AWS, no `terraform init/plan/apply`, no Infracost call in CI.
+publishers' checksums before they are executed. **That workflow is green**: run
+[`33016125195`](https://github.com/hossainpazooki/network-as-code/actions/runs/33016125195)
+on 2026-08-26 evaluated every rule on Linux, refused all 18 negative controls,
+and reproduced the 13 historical findings exactly. Zero credentials, zero spend:
+no AWS, no `terraform init/plan/apply`, no Infracost call in CI.
 
 ## Layout
 
