@@ -17,7 +17,7 @@ gates/fixtures/historical/       vendored evidence, blob-SHA pinned
 gates/fixtures/conforming/       must PASS
 gates/fixtures/violations/       must be REFUSED
 gates/docs/parse-shape.md        observed parse shape - the rule-writing contract
-.github/workflows/gate.yml       CI, one job per run.sh target
+.github/workflows/gate.yml       CI, one job per ./run.sh gate STEP (6 of them)
 README.md / STATUS.md            claims; STATUS.md is the ceiling of what is true
 ```
 

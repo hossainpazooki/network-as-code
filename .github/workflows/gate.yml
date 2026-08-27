@@ -1,4 +1,10 @@
-# Fail-closed policy gate. Mirrors ./run.sh, one job per target.
+# Fail-closed policy gate. One job per step of `./run.sh gate`, in the same
+# order and with the same dependency chain: verify-provenance -> unit ->
+# conforming -> violations -> coverage -> historical. Six jobs, six steps.
+# (run.sh also has targets with no job - combined, parse, demo, tools - because
+# they are diagnostics, not gate steps. "One job per TARGET" was the old wording
+# here and it was never true; worse, from 2026-08-24 to 2026-08-27 it concealed
+# that `coverage` was a gate step with no job at all. See STATUS.md.)
 #
 # ABSOLUTE RULE for this file: no exit-code suppression of any kind - no
 # or-true suffix, no continue-on-error, no "if: always()" rescue on a failing
@@ -136,8 +142,39 @@ jobs:
       - name: run.sh violations
         run: ./run.sh violations
 
-  historical:
+  # Every rule ID a policy can emit must be emitted by some fixture the
+  # violations job refuses. Without this job the assertion existed only on a
+  # developer's machine: `t_gate` has called `t_coverage` since 2026-08-24, but
+  # no workflow job ran it, so a rule shipped with no negative control merged
+  # green. That is the same defect class this repo exists to correct - a check
+  # that cannot fail the build is not a check - reproduced one level up, in the
+  # gate's own CI. Recorded in STATUS.md rather than quietly fixed.
+  coverage:
     needs: violations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned tools (sha256-verified)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -O "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/checksums.txt"
+          grep -E "  conftest_${CONFTEST_VERSION}_Linux_x86_64\.tar\.gz$" checksums.txt | sha256sum -c -
+          published=$(awk -v f="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" '$2 == f {print $1}' checksums.txt)
+          test "$published" = "$CONFTEST_LINUX_SHA256"
+          tar -xzf "conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" conftest
+          curl -fsSL -o opa "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          curl -fsSL -o opa.sha256 "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static.sha256"
+          echo "$(awk '{print $1}' opa.sha256)  opa" | sha256sum -c -
+          chmod +x conftest opa
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: run.sh coverage
+        run: ./run.sh coverage
+
+  historical:
+    needs: coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

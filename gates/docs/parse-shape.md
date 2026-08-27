@@ -1,9 +1,11 @@
 # Parse shape - the contract every rule is written against
 
-Produced by the Phase 0 spike on 2026-08-24. Every fact below was observed by
-running the pinned tools against the vendored fixtures, not assumed. If a rule
-disagrees with this document, the rule is wrong until this document is re-run
-and updated.
+Produced by the Phase 0 spike on 2026-08-24; every claim re-derived from the
+tree on 2026-08-27, which corrected two of them (the escaping quirk below, and
+the per-file rule set, which had not been told about FIN-003). Every fact here
+was observed by running the pinned tools against the vendored fixtures, not
+assumed. If a rule disagrees with this document, the rule is wrong until this
+document is re-run and updated.
 
 Regenerate with `./run.sh parse`.
 
@@ -36,7 +38,12 @@ deny contains msg if {
   families share one package, `deny` is the UNION across families.
 - `deny` fails the run. `warn` does not. Every rule in this repo uses `deny`.
 - `conftest test` exits **1** when any `deny` fires, **0** when none do.
-  Verified by smoke test.
+  Verified by smoke test. **It also exits 1 when it cannot read the input at
+  all** - empty directory, unknown parser, missing file - so the exit code
+  alone cannot tell a refusal from a tool error, and a negative control that
+  checks only `$?` counts an unreadable input as a successful refusal. That is
+  why `run.sh` asks `deny_count` for a machine-readable count on every
+  assertion and treats the unparseable case as `ERR`, never as 0.
 
 ## HCL2 (`.tf`) - conftest parses natively, no `terraform init`
 
@@ -77,7 +84,7 @@ come back as `"${...}"` strings:
 "cidr":            "${var.vpc_cidr}",
 "name":            "${var.project_name}-vpc",
 "private_subnets": "${[for i, az in local.azs : cidrsubnet(var.vpc_cidr, 8, i + 1)]}",
-"version":         "~> 5.0"
+"version":         "~\u003e 5.0"
 ```
 
 **This is why SEC-002 compares against the VPC CIDR and not per-subnet CIDRs.**
@@ -134,7 +141,7 @@ mode and vice versa.** They are separate conftest invocations with separate
 policy directories:
 
 - `policy/` - per-file rules (SEC-001, SEC-002, SEC-002-DRIFT, OBS-001,
-  OBS-002, FIN-002)
+  OBS-002, FIN-002, FIN-003)
 - `policy/combined/` - cross-file rules (SEC-003, and FIN-001)
 
 `run.sh` and CI must keep these two invocations distinct.
@@ -148,7 +155,17 @@ Terraform, so any rule reading a provider-wide fact must see the whole module.
 
 ## Known cosmetic quirks
 
-- `>` in version constraints is HTML-escaped: `"~> 5.0"`. Compare with the
-  escaped form or use `contains()` on a substring that avoids it.
+- **`>` is NOT escaped in the value. It only looks that way.** `conftest parse`
+  prints `module.vpc[0].version` as `"~\u003e 5.0"`, and this document used to
+  call that "HTML-escaped" and say to "compare with the escaped form". Both
+  halves were wrong. `\u003e` is JSON *serialization* of `>` - not HTML's
+  `&gt;` - and it is an artifact of how `parse` renders its output. The string
+  Rego sees is the ordinary `~> 5.0`. Verified 2026-08-27 against
+  `fixtures/historical/terraform/vpc.tf`: `mod.version == "~> 5.0"`,
+  `mod.version == "~\u003e 5.0"` (the same literal to the Rego parser, which reads
+  the escape too) and `contains(mod.version, ">")` each matched. Compare with
+  the plain form. Anyone who took the old advice literally and wrote `&gt;`
+  would have shipped a clause that could never fire - this repo's own defect
+  class, sitting in the document written to prevent it.
 - Comments are dropped by the parser. A rule can never see a `#` justification;
   that is why the SEC-002 exemption is an **annotation**, not a comment.

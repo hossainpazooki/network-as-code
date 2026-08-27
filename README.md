@@ -26,7 +26,7 @@ $ cd gates && ./run.sh demo
 === DEMO: the gate refusing a violation ===
 FAIL - fixtures/violations/perfile/netpol-wide-ipblock.yaml - main - SEC-002: egress ipBlock 10.0.0.0/8 is broader than the declared VPC CIDR 10.0.0.0/16 (NetworkPolicy egress-wide-demo, egress[0].to[0])
 
-13 tests, 12 passed, 0 warnings, 1 failure, 0 exceptions
+15 tests, 14 passed, 0 warnings, 1 failure, 0 exceptions
 conftest exit code: 1 (non-zero = refused)
 ```
 
@@ -63,19 +63,19 @@ messages are what changed. Nothing was tuned to hold the number.
 
 SEC-001 (security group open to the world) finds **0** in my config -- there is
 no `0.0.0.0/0` in any of the 12 vendored `.tf` files. OBS-002 (flow logs without
-a retention period) also finds **0**, because it is gated on flow logs existing
-at all and OBS-001 already fired. Neither is dead weight and neither is proven
-by a finding: each is proven by its negative control, a fixture the gate must
-refuse. There are 16 such fixtures -- 12 single-file and 4 directory sets -- and
-all 16 are asserted refused on every run.
+a retention period) also finds **0**, gated on flow logs existing at all and
+OBS-001 already fired. Neither is dead weight and neither is proven by a
+finding: each is proven by its negative control, a fixture the gate must refuse.
+There are 18 -- 14 single-file, 4 directory sets -- all asserted refused every
+run. `./run.sh coverage` then deletes each of the 15 deny clauses in turn and
+requires some fixture's finding count to drop, so a clause no control exercises
+fails the build even while its rule ID still fires from a sibling clause.
 
-FIN-002 (Infracost budget delta) has a refusing fixture in the negative-control
-loop like every other rule, but no measurement behind it: both its breakdown JSONs are
-hand-authored, carry a `SYNTHETIC-` filename element and a `_synthetic` marker
-key, and no real `infracost breakdown` has ever run against this repo (no API
-key). Its ceilings come from `gates/policy/budget.json`, which the gate loads
-with `--data policy`; a unit test fails if the rule's embedded fallback copy
-drifts from that file. See `STATUS.md`.
+FIN-002 (Infracost budget delta) has a refusing fixture like every other rule but
+no measurement behind it: both breakdown JSONs are hand-authored, marked
+`SYNTHETIC-`. Real breakdowns *were* run locally on 2026-08-26 and deliberately
+not committed, so every dollar figure here is illustrative -- a decision recorded
+in `STATUS.md`, not a missing API key. Ceilings come from `policy/budget.json`.
 
 Not built: aggregating the flow logs that OBS-001 asks for into egress-GB-per-
 app reporting -- the plane-1 to plane-5 extension -- is a direction, not code in
@@ -86,18 +86,21 @@ this repo.
 ```
 cd gates
 ./run.sh demo     # 30 seconds: watch the gate refuse a violation
-./run.sh gate     # the full build: provenance, unit, conforming, violations, self-audit
+./run.sh gate     # provenance, unit, conforming, violations, coverage, self-audit
 ```
 
-Targets: `verify-provenance`, `unit`, `conforming`, `violations`, `combined`,
-`historical`, `parse`, `demo`, `gate`, `tools`. The same five are DEFINED as separate
-jobs in `.github/workflows/gate.yml`, triggered on push and pull request, with
-the pinned conftest 0.69.0 / OPA 1.19.1 binaries sha256-verified against the
-publishers' checksums before they are executed. **That workflow is green**: run
+`gate` runs six steps -- `verify-provenance`, `unit`, `conforming`,
+`violations`, `coverage`, `historical` -- each DEFINED as its own job in
+`.github/workflows/gate.yml`, chained so a failure stops the rest. CI runs on
+push and PR, with conftest 0.69.0 / OPA 1.19.1 checked against the publishers'
+sha256 checksums before execution. Run
 [`33016125195`](https://github.com/hossainpazooki/network-as-code/actions/runs/33016125195)
-on 2026-08-26 evaluated every rule on Linux, refused all 18 negative controls,
-and reproduced the 13 historical findings exactly. Zero credentials, zero spend:
-no AWS, no `terraform init/plan/apply`, no Infracost call in CI.
+on 2026-08-26 was green across the five jobs that existed then: every rule
+evaluated on Linux, 18 negative controls refused, 13 historical findings
+reproduced exactly. `coverage` became the sixth job on 2026-08-27 -- until
+then that gate step ran only on a developer's machine (see `STATUS.md`).
+Zero credentials, zero spend: no AWS, no `terraform init/plan/apply`, no
+Infracost call in CI.
 
 ## Layout
 
