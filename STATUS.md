@@ -10,8 +10,8 @@ carried forward from the previous measurement. Nothing here is a projection.
 | Fact | Value | How it was measured |
 |---|---|---|
 | Gate result | `GATE GREEN`, exit 0 | `./run.sh gate` |
-| Same gate in CI | all **6** jobs green, run `33081248574`, 2026-08-27 - over the 22-file tree at 13 findings | GitHub Actions, Ubuntu runner; log lines quoted below |
-| CI over the 31-file tree, 15 findings, measured fixtures | **not yet observed on a runner** - the state below is local until the next push reports | pending |
+| Same gate in CI | all **6** jobs green, run `33089563447`, 2026-08-27, over this tree (31 files, 15 findings, measured fixtures, FIN-004) | GitHub Actions, Ubuntu runner; log lines quoted below |
+| **The gate blocking a merge** | PR [#1](https://github.com/hossainpazooki/network-as-code/pull/1), run `33090175858`: `conforming` **failure**, `mergeStateStatus` **BLOCKED**, 2026-08-27 | GitHub API and the job log; see the section below |
 | Previous CI state | 5 of the 6 gate steps had a job until 2026-08-27; all 5 green, run `33016125195`, 2026-08-26 | superseded, kept as the record |
 | Rego unit tests | 74 / 74 pass | `opa test policy tests` |
 | Conforming fixtures accepted | 10 per-file + 4 combined sets (two of the per-file are measured Infracost breakdowns) | `./run.sh conforming` |
@@ -73,8 +73,8 @@ directly:
 > fixture under `fixtures/violations/`
 
 A clause whose removal changes nothing is a clause no negative control
-exercises. **All 15 clauses pass**, each reported with the fixture that proves
-it. The check needed no change to any message, fixture or unit test — the
+exercises. **All 15 clauses passed at closure - 16 since FIN-004 landed the
+same day** - each reported with the fixture that proves it. The check needed no change to any message, fixture or unit test — the
 message-tagging approach it replaces would have rewritten the expected text of
 all 18 fixtures, a large share of the 66 unit tests, and the README demo line,
 in order to make the gate legible to itself.
@@ -96,17 +96,18 @@ Cost: the `gate` chain went from ~6s to ~14s on Windows. Nothing is
 short-circuited or sampled, locally or in CI, and the target says so in its own
 output.
 
-**Confirmed on Linux, not only locally.** Run `33081248574` on 2026-08-27 is
-the first with all six jobs. Extracted from its log rather than read off the
-check mark:
+**Confirmed on Linux, not only locally.** Run `33081248574` on 2026-08-27 was
+the first with all six jobs (22-file tree: 66/66, 18 controls, 15 clauses, 13
+findings). Run `33089563447`, same day, is the current tree. Extracted from
+its log rather than read off the check mark:
 
 ```
-verify-provenance   22 files verified against PROVENANCE.md, and the tree contains exactly that set.
-unit                PASS: 66/66
-violations          14 per-file + 4 combined = 18 negative controls, all refused.
+verify-provenance   31 files verified against PROVENANCE.md, and the tree contains exactly that set.
+unit                PASS: 74/74
+violations          15 per-file + 4 combined = 19 negative controls, all refused.
 coverage            every declared rule ID is exercised by a refusing fixture.
-coverage            all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped.
-historical          total : 13 (expected 13)
+coverage            all 16 deny clauses are load-bearing for a refusing fixture. Nothing skipped.
+historical          total : 15 (expected 15)
 ```
 
 Three limits, stated rather than discovered later:
@@ -214,11 +215,12 @@ offline, so every ledger row was compared against `git ls-tree` at that ref:
 one, and it was established by comparison rather than by trusting the earlier
 comparison.
 
-`PROVENANCE.md`'s sentence is therefore understated. It has deliberately **not**
-been edited: it lives under `gates/fixtures/historical/`, and hard rule 1 in
-`CLAUDE.md` forbids editing or adding anything there without qualification.
-Updating the ledger's own prose is the author's call, not an agent's — flagged
-here rather than done.
+`PROVENANCE.md`'s sentence was therefore understated, and on the day it was
+written this note said it had deliberately not been edited, because it lives
+under `gates/fixtures/historical/`. Later the same day the ledger had to be
+extended for the nine vendored files (the sanctioned exception, below), and
+`PROVENANCE.md` - which is the ledger, not evidence - was updated then: it now
+records both the 2026-08-24 vendoring and the 2026-08-27 re-verification.
 
 All four are corrected in the same commit as the job itself. The past-tense
 records were deliberately **not** rewritten: run `33016125195` really did have
@@ -336,6 +338,61 @@ ran against the completed root module and committed its output.
    `totalSupportedResources`. The rule was right, its documentation named the
    wrong key. Corrected in place with the old figure kept and labelled.
 
+## The gate blocking a merge - PR #1, 2026-08-27
+
+The claim this repository exists to make ends in the verb *blocking*, and until
+today every piece of evidence stopped at *refusing*. This is the artifact.
+
+**Setup.** Branch protection on `master`, verified through the API and not a
+screenshot: required status checks are exactly the six gate jobs
+(`verify-provenance`, `unit`, `conforming`, `violations`, `coverage`,
+`historical`), `enforce_admins: true` (no bypass, the owner included), strict
+up-to-date required, no force pushes, no deletions.
+
+**The change.** Branch `demo/gate-refuses-merge`, one file:
+`gates/fixtures/conforming/perfile/sec-sg-open-to-world.tf`, an
+`aws_security_group` whose ingress opens port 22 to `0.0.0.0/0`, placed in the
+corpus `./run.sh conforming` asserts must pass. Every other argument and tag is
+set so that nothing but SEC-001 has a reason to object - proven locally before
+the branch existed: the file alone yields exactly one deny, and a simulated
+conforming corpus with it added yields 10 files, 1 deny.
+
+**The result.** [PR #1](https://github.com/hossainpazooki/network-as-code/pull/1),
+head `865de9d`, run `33090175858`:
+
+| Check | Result |
+|---|---|
+| `verify-provenance` | success (runs before `conforming`; never reads the file) |
+| `unit` | success (same) |
+| `conforming` | **failure** - `FAIL - fixtures/conforming/perfile/sec-sg-open-to-world.tf - main - SEC-001: aws_security_group bastion ingress cidr_blocks includes 0.0.0.0/0 (aws_security_group.bastion)` / `176 tests, 175 passed, 0 warnings, 1 failure, 0 exceptions` / `Process completed with exit code 1` |
+| `violations`, `coverage`, `historical` | **skipped** - they `needs:` `conforming` and never ran |
+| merge state (API) | `mergeStateStatus: BLOCKED`, `mergeable: MERGEABLE` - no conflict, the branch is blocked on the failing required check alone |
+
+**What this evidences, exactly.** *The violating file turned exactly the job
+that reads it red.* `fixtures/conforming/` is read by `t_conforming()` and by
+nothing else in `run.sh`, so one job could see the change and that job failed.
+The two green checks ran before it and never evaluate that directory; the
+three skipped checks never ran at all. None of the five is evidence of
+discrimination, and the claim is no broader than the one job that could see
+the file.
+
+**What it does not evidence.** A production change, a plan, an apply. The gate
+evaluates declarative files; the conforming corpus is its stand-in for
+infrastructure someone is proposing. Nothing running was touched.
+
+**Standing artifact.** The PR stays open and unmerged. Because protection
+requires branches to be up to date, later merges into `master` will also mark
+it behind; the state recorded above is as of run `33090175858`, and the run
+log is the durable record.
+
+**One thing on the PR that is not ours.** A fourth check, `Infracost`, reports
+from `dashboard.infracost.io`: the Infracost GitHub App attached itself to the
+repository when Infracost Cloud was authenticated on 2026-08-26. It is not a
+required context and cannot affect merging. It is, however, an external
+credentialed service reading a repository whose claim is that CI makes no
+Infracost call - the app's run is not this gate's, and it is recorded here so
+no reader mistakes its check for one of ours. Its removal is the author's call.
+
 ## The 15 historical findings (13 until 2026-08-27)
 
 Against `gates/fixtures/historical/`, vendored from
@@ -385,11 +442,8 @@ file, and the now-closed ruling OQ-1.
 
 ## Not yet - do not claim these
 
-- **The gate has not yet refused anything in a pull request.** Run
-  `33016125195` proves the rules execute and refuse in CI, but it ran on a push
-  to `master` where every fixture was already in its expected state. The claim
-  "here is the gate blocking a violation from merging" needs a PR whose check
-  goes red on a deliberate violation, and no such PR exists yet.
+- ~~The gate has not yet refused anything in a pull request.~~ **CLOSED
+  2026-08-27** - PR #1, below.
 - **Infracost: measured, committed, ceilings derived - claim ceiling unchanged.**
   The three breakdown JSONs under `fixtures/` are real output of Infracost
   v0.10.45, run once, locally, on 2026-08-27, against a copy of the completed

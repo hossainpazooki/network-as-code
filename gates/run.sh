@@ -1,7 +1,7 @@
 #!/bin/sh
 # Gate runner. POSIX sh: identical behaviour in Git Bash (Windows) and Linux CI.
 # Usage: ./run.sh <target>
-#   unit | conforming | violations | combined | historical | gate
+#   unit | conforming | violations | coverage | historical | gate
 #   parse | verify-provenance | demo | tools
 set -eu
 
