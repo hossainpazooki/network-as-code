@@ -7,27 +7,25 @@ credentials, no `terraform plan`, no spend: files in, verdict out.
 
 ```mermaid
 flowchart LR
-    A["EVIDENCE: the platform I ran, defined in Terraform, destroyed and verified gone; its config vendored read-only and pinned by hash"]
-    B["GATE: Rego rules over Terraform and Kubernetes files; every rule ships with a fixture it must refuse; no credentials, no plan, no spend"]
-    C["PROOF: exact finding count on the evidence, six CI jobs on every PR, and PR #1 blocked from merging"]
-    A --> B --> C
+    A["EVIDENCE: a real platform, pinned by hash"] --> B["GATE: rules that must refuse"] --> C["PROOF: a merge, blocked"]
 ```
+
+| Evidence | Gate | Proof |
+|---|---|---|
+| The platform I ran — defined in Terraform, destroyed, verified gone — with its configuration vendored read-only: 31 files, each pinned by git blob SHA | Rego rules over Terraform and Kubernetes files; every rule ships with a fixture it must refuse; no credentials, no `terraform plan`, no spend | An exact finding count on the evidence (15), six CI jobs on every pull request, and PR #1 blocked from merging |
 
 ## The proof
 
-The default branch, `main`, requires all six gate jobs to pass, with no
-bypass for anyone — the owner included. That is read from GitHub's API, not a
-screenshot: six required contexts, `enforce_admins: true`.
+| | |
+|---|---|
+| Protection on `main` | six required checks, no bypass — the owner included; read from GitHub's API, not a screenshot |
+| [PR #1](https://github.com/hossainpazooki/network-as-code/pull/1) | one file: a security group open to `0.0.0.0/0`, added to the fixtures the `conforming` job asserts must pass |
+| Result | `conforming` **FAILURE**, naming the file · `mergeStateStatus: BLOCKED` · run `33090175858` |
 
-[PR #1](https://github.com/hossainpazooki/network-as-code/pull/1) adds one
-file — a security group open to `0.0.0.0/0` — to the set of fixtures the
-`conforming` job asserts must pass. **The violating file turned exactly the
-job that reads it red.** Run `33090175858`: `conforming` failed with the
-SEC-001 message naming the file; GitHub's API reported
-`mergeStateStatus: BLOCKED`. The claim is no broader than that: the two jobs
-that passed run before `conforming` and never read that directory, and the
-three after it were skipped. If the PR is closed when you read this, the run
-log is the record; `STATUS.md` quotes it.
+**The violating file turned exactly the job that reads it red** — and no more
+than that: the two jobs that passed run before `conforming` and never read
+that directory; the three after it were skipped. If the PR is closed when you
+read this, the run log is the record, and `STATUS.md` quotes it.
 
 ## See it refuse yourself
 
