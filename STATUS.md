@@ -343,7 +343,9 @@ ran against the completed root module and committed its output.
 The claim this repository exists to make ends in the verb *blocking*, and until
 today every piece of evidence stopped at *refusing*. This is the artifact.
 
-**Setup.** Branch protection on `master`, verified through the API and not a
+**Setup.** Branch protection on the default branch (`master` at the time; renamed
+to `main` later the same day, and the rule moved with it - re-verified via the
+API after the rename: six contexts, `enforce_admins: true`), read through the API and not a
 screenshot: required status checks are exactly the six gate jobs
 (`verify-provenance`, `unit`, `conforming`, `violations`, `coverage`,
 `historical`), `enforce_admins: true` (no bypass, the owner included), strict
@@ -380,18 +382,21 @@ the file.
 evaluates declarative files; the conforming corpus is its stand-in for
 infrastructure someone is proposing. Nothing running was touched.
 
-**Standing artifact.** The PR stays open and unmerged. Because protection
-requires branches to be up to date, later merges into `master` will also mark
-it behind; the state recorded above is as of run `33090175858`, and the run
-log is the durable record.
+**Standing artifact - closed.** The PR was meant to stay open and unmerged as
+the standing artifact; it was closed by the author at 16:23:19Z the same day,
+unmerged. The evidence does not depend on the PR's state: run `33090175858`'s
+log and the API state quoted above are the record, and the README says so. The
+PR's base is still `master` - closed PRs are not retargeted by a branch rename.
 
-**One thing on the PR that is not ours.** A fourth check, `Infracost`, reports
-from `dashboard.infracost.io`: the Infracost GitHub App attached itself to the
-repository when Infracost Cloud was authenticated on 2026-08-26. It is not a
-required context and cannot affect merging. It is, however, an external
+**One thing on the PR that was not ours - removed.** A fourth check, `Infracost`,
+reported from `dashboard.infracost.io`: the Infracost GitHub App attached itself
+to the repository when Infracost Cloud was authenticated on 2026-08-26. It was
+never a required context and could not affect merging, but it was an external
 credentialed service reading a repository whose claim is that CI makes no
-Infracost call - the app's run is not this gate's, and it is recorded here so
-no reader mistakes its check for one of ours. Its removal is the author's call.
+Infracost call, and nothing here could vouch for what it did. The author
+uninstalled it on 2026-08-27. Verified on the next pull request: PR #4's status
+rollup reports exactly the six required contexts and nothing else (PRs #2 and
+#3, opened before the removal, still show it as `SKIPPED`).
 
 ## The 15 historical findings (13 until 2026-08-27)
 
