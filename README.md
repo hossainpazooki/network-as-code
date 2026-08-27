@@ -180,6 +180,16 @@ itself enforces: every claim refuted before it was written down, every guard
 mutation-proven red and green, every misfire ledgered. `STATUS.md` is the
 evidence, not this sentence.
 
+## The whole thing in three boxes
+
+```mermaid
+flowchart LR
+    A["EVIDENCE: the platform I ran, defined in Terraform, destroyed and verified gone; its config vendored read-only and pinned by hash"]
+    B["GATE: Rego rules over Terraform and Kubernetes files; every rule ships with a fixture it must refuse; no credentials, no plan, no spend"]
+    C["PROOF: exact finding count on the evidence, six CI jobs on every PR, and a real PR blocked from merging"]
+    A --> B --> C
+```
+
 ## What this is, and is not
 
 A CI policy gate over Terraform and Kubernetes manifests, three rule families:
@@ -211,6 +221,18 @@ flowchart LR
     J -.->|committed to the repo| A
     D -.->|never touched| H["Anything already running"]
 ```
+
+Why Infracost is not called in CI, and where it would be. Pricing needs an
+Infracost API key, and this repo's one non-negotiable is no credential at
+evaluation time. Beyond that, a verdict that depends on a live pricing service
+is not deterministic: the same commit could pass one day and fail the next
+with no change to the code, and the tool's own failure modes (exit 0 on a
+failed parse; a renamed schema on upgrade) would be live in the pipeline
+instead of caught once, by a person reading the output. Committing the
+breakdown puts the number that gets gated in the diff. In a real pipeline the
+*generation* step is what moves: an Infracost run per pull request, a scoped
+key in a secret, producing the breakdown that the same FIN-002/003/004 rules
+then evaluate. The rules do not change; only where the JSON comes from does.
 
 Not claimed, deliberately: nothing running is enforced (this gates files, not
 clusters, and no Terraform is authored or applied here); live plan/apply gating
