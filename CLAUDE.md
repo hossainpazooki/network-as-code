@@ -29,7 +29,7 @@ conforming -> violations -> coverage -> historical, ending in `GATE GREEN`. Othe
 
 ## Two hard rules
 
-1. **Never edit OR ADD anything under `gates/fixtures/historical/`.** Those 22
+1. **Never edit OR ADD anything under `gates/fixtures/historical/`.** Those 31
    files are verbatim evidence pinned by git blob SHA in `BLOBSHAS.txt`. Rules
    flag findings in them on purpose - that is the self-audit. A rule firing on a
    historical file is a SUCCESS, not a bug to fix. `./run.sh verify-provenance`
@@ -37,6 +37,16 @@ conforming -> violations -> coverage -> historical, ending in `GATE GREEN`. Othe
    its working directory inside this tree: on 2026-08-26 an `infracost` run wrote
    an 822-file module cache here and every blob SHA still matched. Copy the tree
    elsewhere and run against the copy.
+
+   This rule has been excepted exactly once, on 2026-08-27, and the exception is
+   spent: the nine `modules/iam/**` files that `terraform/iam.tf` sources were
+   left behind by the original vendoring and were added from the same source
+   ref (`95df6ef`), each verified against its blob SHA, with the ledger extended
+   in the same commit. That completed an incomplete image of one root module;
+   it did not edit evidence. It was ruled (F3) and recorded with the nine SHAs
+   at commit `9b68fc4` before it was exercised. The record is in `STATUS.md`.
+   It is not a precedent - a second addition, for any reason, is a violation
+   of this rule.
 2. **Never add `|| true` or `continue-on-error` to the workflow.** The repo being
    audited shipped a Checkov step that ended in `|| true` and therefore could
    never fail; correcting that is this repo's reason to exist. The historical

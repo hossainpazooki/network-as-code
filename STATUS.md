@@ -17,8 +17,8 @@ carried forward from the previous measurement. Nothing here is a projection.
 | Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
 | Rule IDs with a refusing fixture | 9 / 9 | `./run.sh coverage`, and now in CI - the `coverage` job in run `33081248574` printed "every declared rule ID is exercised by a refusing fixture" |
 | Deny clauses load-bearing for a refusing fixture | 15 / 15 | `./run.sh coverage` clause pass - deleting any one clause must reduce some fixture's deny count. Confirmed on a runner: "all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped." |
-| Findings in vendored historical config | **13** (4 per-file + 9 combined) | `./run.sh historical`, exact-count assertion |
-| Vendored files provenance-verified | 22 / 22 blob SHAs, and the tree holds exactly that set | `./run.sh verify-provenance` |
+| Findings in vendored historical config | **15** (4 per-file + 11 combined); 13 until 2026-08-27, both deltas adjudicated true | `./run.sh historical`, exact-count assertion |
+| Vendored files provenance-verified | 31 / 31 blob SHAs, and the tree holds exactly that set (22 until 2026-08-27) | `./run.sh verify-provenance` |
 
 ## Rule families
 
@@ -224,17 +224,105 @@ records were deliberately **not** rewritten: run `33016125195` really did have
 five jobs, and run `32802416866` really did skip four, so those numbers stand
 as written. Only the present-tense structural claims moved to six.
 
-## The 13 historical findings
+## The one sanctioned exception to hard rule 1 - spent 2026-08-27
+
+Hard rule 1 says never edit or add anything under `gates/fixtures/historical/`.
+On 2026-08-27 nine files were added there, once, under an exception written
+down before the files landed. This section is that record, in the order a
+hostile reader would want it.
+
+**What was wrong.** `terraform/iam.tf` in the vendored tree sources three local
+modules: `../modules/iam/builder`, `../modules/iam/provisioner`,
+`../modules/iam/pod`. `../modules/` is a sibling of `terraform/` and `kube/`
+inside the same subtree at the same ref. The 2026-08-24 vendoring took
+`terraform/` and `kube/` and omitted `modules/`; no reason was recorded, and
+none is claimed now. So the evidence tree was an incomplete image of one
+Terraform root module: three module references that resolve at the source ref
+and dangled here. That is a provenance defect of the original vendoring, and it had a
+measurable consequence - Infracost, given this tree, loaded nothing and priced
+$0.00 (the 2026-08-26 finding that produced FIN-003).
+
+**What was done.** The nine files were added at their source paths, so
+`modules/iam/{builder,pod,provisioner}/{main,outputs,variables}.tf` now sits
+beside `terraform/` and `kube/` exactly as it does in the subtree. Nothing that
+was already vendored was touched; `git diff` over the original 22 is empty.
+
+**Who sanctioned it, and when.** The author - who wrote the rule - as ruling
+F3, recorded together with the nine blob SHAs in the adoption plan at commit
+`9b68fc4` on 2026-08-27, before any file was added. The decision is older than
+the act, and the history shows it.
+
+**Why this is completion, not editing.** Three facts carry it:
+
+1. Every one of the nine files was extracted directly from the source ref with
+   `git show 95df6efd8be92dc589e2cbd0124c79b78922dade:modules/iam/<path>` -
+   from the ref, never from a working tree - and `git hash-object` of each
+   written file equals the blob SHA recorded for that path at that ref. The
+   nine SHAs were derived and written into the adoption plan on 2026-08-27,
+   before this change was made, so they are a prediction the files had to
+   match, not a description of what landed.
+2. On 2026-08-27 all 22 previously vendored files were re-compared against
+   `git ls-tree` at the same ref: 22 match, 0 differ. The ref-equality
+   `PROVENANCE.md` said was "established once, at vendoring time" holds as of
+   two dates, and the nine additions come from the very tree that check ran
+   against.
+3. The ledger grew in the same commit the files did: `BLOBSHAS.txt` 22 -> 31
+   rows, `PROVENANCE.md`'s table likewise, and `./run.sh verify-provenance`
+   asserts the tree contains exactly those 31 and nothing else. There was no
+   commit in which the tree and the ledger disagreed.
+
+**What it changes downstream.** The self-audit corpus and the provenance corpus
+are the same 31 files - ruling F4, 2026-08-27: the nine files are evaluated by
+the per-file loop and by the terraform-combined set, which is now
+`terraform/ + modules/` as ONE combined invocation, because a Terraform child
+module that declares no provider of its own inherits the root provider and its
+`default_tags`, and FIN-001's union credit is only correct when both are in
+the same evaluation. The historical finding count moved as a result; see the
+next section, where every delta is adjudicated individually.
+
+**What it does not license.** Nothing. The rule stands, and the exception is
+spent. Any further addition to `gates/fixtures/historical/` is a hard
+violation, and `verify-provenance` fails on it by construction.
+
+## The 15 historical findings (13 until 2026-08-27)
 
 Against `gates/fixtures/historical/`, vendored from
 the platform-infrastructure subtree of my local monorepo (name withheld) at provenance SHA
 `95df6efd8be92dc589e2cbd0124c79b78922dade`:
 
-- 8 x FIN-001 - combined over the `terraform/` root module: `ecr.tf`,
-  `elasticache.tf` (3), `rds.tf`, `secrets.tf` (3)
+- 10 x FIN-001 - combined over the root module as one set, `terraform/` +
+  `modules/`: `ecr.tf`, `elasticache.tf` (3), `rds.tf`, `secrets.tf` (3), and
+  `modules/iam/builder/main.tf`, `modules/iam/provisioner/main.tf`
 - 1 x OBS-001 - `terraform/vpc.tf`, per-file
 - 3 x SEC-002 - `kube/base/egress-common.yaml`, per-file
 - 1 x SEC-003 - combined over the `kube/` tree, both NetworkPolicy files
+
+### How 13 became 15 - each delta adjudicated, none assumed
+
+The number moved because the input grew, not because a rule changed. The rule
+files are byte-identical before and after. Every message emitted over the
+31-file tree was listed and compared against the 13 emitted over the 22-file
+tree; the difference is exactly two, both from the terraform-combined set:
+
+| New finding | Own tags | Credited from `versions.tf` `default_tags` | Missing | True? |
+|---|---|---|---|---|
+| `aws_iam_role.builder` | `Component`, `Role` | `Project`, `ManagedBy`, `Environment` | `App` | **Yes** - `App` appears nowhere in the file, and the credit is correct: `modules/iam/builder` declares no provider block, so it inherits the root provider and its `default_tags` |
+| `aws_iam_role.provisioner` | `Component`, `Role` | same | `App` | **Yes** - same reasoning, same file shape |
+
+These are the same defect as the existing eight: `App` was never applied
+anywhere in the platform, so cost-per-application was unanswerable for its IAM
+roles too. The four `aws_iam_role_policy` resources in the same files are
+non-taggable and correctly produce nothing. The IRSA `module` calls in
+`modules/iam/pod/main.tf` are module invocations, not resources, and FIN-001
+does not walk them. Zero new per-file findings: the nine files declare no
+`provider`, no `vpc_cidr`, no `aws_vpc`, no security group.
+
+**The control that proves the one-set rule matters.** Running
+`--combine modules/` *alone* reports `Environment, App` missing on both roles.
+`Environment` is not missing - it arrives through provider inheritance - so
+that would be a false finding, of exactly the kind FIN-001 was rebuilt on
+2026-08-24 to stop emitting. This is why `run.sh` evaluates `terraform/` and
+`modules/` as one combined invocation and never separately.
 
 All 8 FIN-001 messages now name `App`, and only `App`, which is the tag that is
 genuinely absent everywhere. Until 2026-08-24 they also named `Environment`, and

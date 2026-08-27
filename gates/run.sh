@@ -26,20 +26,30 @@ OPA=$(find_tool opa)
 
 # Expected count of findings in the vendored historical config.
 # Changing this number is a claim: update STATUS.md in the same commit.
-# Measured 2026-08-24, composition (see STATUS.md):
+# Measured 2026-08-27 over the completed 31-file tree, composition (STATUS.md):
 #   per-file (conftest test $HIST --policy policy)            -> 4
 #     1 x OBS-001 (module.vpc, no flow logs)      -> terraform/vpc.tf
 #     3 x SEC-002 (egress-common.yaml ipBlocks)   -> kube/base/
 #   combined over kube/      (--policy policy/combined)       -> 1
 #     1 x SEC-003 (no default-deny Ingress)
-#   combined over terraform/ (--policy policy/combined)       -> 8
-#     8 x FIN-001 (ecr 1, elasticache 3, rds sg 1, secrets 3)
-# FIN-001 moved from per-file to combined mode on 2026-08-24 (a correctness
-# fix, not a re-tune): provider default_tags applies to the whole root module,
-# so a per-file rule reported Environment missing when versions.tf declares it.
-# The COUNT is unchanged at 8 - App is genuinely absent on all 8 resources -
-# but the messages now name only the tags that are really missing.
-HISTORICAL_EXPECTED=${HISTORICAL_EXPECTED:-13}
+#   combined over terraform/ + modules/ as ONE set            -> 10
+#     8 x FIN-001 (ecr 1, elasticache 3, rds sg 1, secrets 3) - unchanged
+#     2 x FIN-001 (aws_iam_role.builder, .provisioner)        - NEW 2026-08-27
+#
+# 13 -> 15 on 2026-08-27 because the INPUT GREW, not because a rule changed:
+# the nine modules/iam/** files terraform/iam.tf sources were vendored (the
+# one sanctioned exception to the no-additions rule). Each of the two new
+# findings was adjudicated as TRUE before this number moved: both roles carry
+# tags {Component, Role}, so App is genuinely absent; Environment is correctly
+# credited from versions.tf's default_tags because a child module with no
+# provider block of its own inherits the root provider. The control run -
+# modules/ combined ALONE - reports "Environment, App" on both, which is the
+# false finding the one-set rule prevents. Zero new findings per-file.
+#
+# Earlier history: FIN-001 moved from per-file to combined mode on 2026-08-24
+# (a correctness fix, not a re-tune) - the count stayed 8, the messages became
+# true. Changing this number is a claim: update STATUS.md in the same commit.
+HISTORICAL_EXPECTED=${HISTORICAL_EXPECTED:-15}
 
 POLICY=policy
 POLICY_COMBINED=policy/combined
@@ -369,13 +379,27 @@ t_clause_coverage() {
 # configuration scope: the terraform root module for FIN-001 (provider
 # default_tags applies module-wide), the kube manifest tree for SEC-003.
 # Merging them would evaluate a provider block against Kubernetes docs.
+#
+# THE TERRAFORM SET IS terraform/ AND modules/ TOGETHER, in ONE invocation.
+# terraform/iam.tf sources ../modules/iam/{builder,pod,provisioner}; those are
+# child modules of the same root module, they declare no provider of their
+# own, and in Terraform a child module without its own provider block inherits
+# the root provider configuration - default_tags included. FIN-001 credits the
+# union of every default_tags block in the combined set, so the credit is only
+# correct if the provider block (versions.tf) and the module resources are
+# evaluated together. Evaluating modules/ alone would report Environment
+# missing on resources that really do carry it - the exact false finding
+# FIN-001 was rebuilt to stop emitting. Ruling F4, 2026-08-27, STATUS.md.
 t_combined() {
-	for scope in kube terraform; do
-		say "cross-file rules over historical $scope/ (combined mode)"
-		c=$(deny_count "$CONFTEST" test --combine "$HIST/$scope" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
-		[ "$c" != "ERR" ] || { echo "TOOL ERROR evaluating $HIST/$scope" >&2; exit 1; }
-		show_with_count "$c" "$CONFTEST" test --combine "$HIST/$scope" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
-	done
+	say "cross-file rules over historical kube/ (combined mode)"
+	c=$(deny_count "$CONFTEST" test --combine "$HIST/kube" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
+	[ "$c" != "ERR" ] || { echo "TOOL ERROR evaluating $HIST/kube" >&2; exit 1; }
+	show_with_count "$c" "$CONFTEST" test --combine "$HIST/kube" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
+
+	say "cross-file rules over historical terraform/ + modules/ (combined mode, one root module)"
+	c=$(deny_count "$CONFTEST" test --combine "$HIST/terraform" "$HIST/modules" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
+	[ "$c" != "ERR" ] || { echo "TOOL ERROR evaluating $HIST/terraform + $HIST/modules" >&2; exit 1; }
+	show_with_count "$c" "$CONFTEST" test --combine "$HIST/terraform" "$HIST/modules" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
 }
 
 # The self-audit. Non-zero is EXPECTED here - but it is asserted by exact
@@ -385,7 +409,8 @@ t_historical() {
 	say "self-audit: rules run against my own prior operated config"
 	pf=$(deny_count "$CONFTEST" test "$HIST" --policy "$POLICY" --data "$DATA" --all-namespaces)
 	cfk=$(deny_count "$CONFTEST" test --combine "$HIST/kube" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
-	cft=$(deny_count "$CONFTEST" test --combine "$HIST/terraform" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
+	# terraform/ + modules/ is ONE set - see the note above t_combined.
+	cft=$(deny_count "$CONFTEST" test --combine "$HIST/terraform" "$HIST/modules" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces)
 	for v in "$pf" "$cfk" "$cft"; do
 		[ "$v" != "ERR" ] || { echo "TOOL ERROR: conftest could not evaluate the historical tree; a count of 0 would be a lie." >&2; exit 1; }
 	done
@@ -403,7 +428,7 @@ t_historical() {
 	# there is no '|| true' anywhere in this file.
 	show_with_count "$pf" "$CONFTEST" test "$HIST" --policy "$POLICY" --data "$DATA" --all-namespaces
 	show_with_count "$cfk" "$CONFTEST" test --combine "$HIST/kube" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
-	show_with_count "$cft" "$CONFTEST" test --combine "$HIST/terraform" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
+	show_with_count "$cft" "$CONFTEST" test --combine "$HIST/terraform" "$HIST/modules" --policy "$POLICY_COMBINED" --data "$DATA" --all-namespaces
 }
 
 t_verify_provenance() {

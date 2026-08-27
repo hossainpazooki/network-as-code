@@ -13,7 +13,7 @@ self-audit, and fixing the fixtures would destroy it.
 | Ref | `95df6efd8be92dc589e2cbd0124c79b78922dade` |
 | Commit date | 2026-08-03T16:51:28Z |
 | Commit subject | docs: mark infra decommissioned, record teardown and residuals |
-| Vendored on | 2026-08-24 |
+| Vendored on | 2026-08-24 (22 files); completed 2026-08-27 with the nine `modules/iam/**` files `terraform/iam.tf` sources, from the same ref - the one sanctioned exception to the no-additions rule, recorded in `STATUS.md` |
 | Method | fetched from that subtree's upstream remote at the ref above, then blob-verified (below) |
 
 The subtree's own paths are recorded below (`terraform/…`, `kube/…`); the
@@ -23,12 +23,15 @@ repository it lives in is deliberately not named here.
 
 Each row is the git blob SHA-1 of the file as it was vendored. Recompute
 any row with `git hash-object <path>` and compare — `./run.sh verify-provenance`
-does exactly that for all 22 files at once.
+does exactly that for all 31 files at once.
 
-What this proves OFFLINE is exactly one thing: the 22 files are **unmodified
+What this proves OFFLINE is exactly one thing: the 31 files are **unmodified
 since vendoring**. It does NOT re-check them against the upstream ref - that
 would need the network and the source repo, neither of which the gate has. The
-equality with the ref was established once, at vendoring time, on 2026-08-24.
+equality with the ref was established at vendoring time, on 2026-08-24, and
+re-established offline on 2026-08-27 by comparing every row against `git ls-tree`
+at the ref in an archived clone (22 match, 0 differ); the nine 2026-08-27
+additions were extracted from that same ref and hash-checked on write.
 
 Nor does it make them **attributable**: nothing here proves this configuration
 was mine to operate. That is something I supply directly - deliberately, since
@@ -63,3 +66,12 @@ Verify every row at once:
 | `terraform/variables.tf` | `4a92411ea4528f0dcbdfba6d64204b40eec08cfc` |
 | `terraform/versions.tf` | `c63abd02bfb7a978cf41cbc4113e62d40d4b96c2` |
 | `terraform/vpc.tf` | `2ac14906a84db64eb7bfa12665ec390e3f4ed718` |
+| `modules/iam/builder/main.tf` | `2c368a6197b10ef47eb5280748e8d5f72cc20001` |
+| `modules/iam/builder/outputs.tf` | `eee5bc372c48a9a732f0ed018e5c6750dc406117` |
+| `modules/iam/builder/variables.tf` | `1c78d329a17b0d4d6c4058ec25b525a2c403e7ae` |
+| `modules/iam/pod/main.tf` | `f9a155326304d43a828158ee39af83121b9aef47` |
+| `modules/iam/pod/outputs.tf` | `3e30c4a272d8d89a3130b9f7fd622acc91b9e220` |
+| `modules/iam/pod/variables.tf` | `c522009d3e50ee3282cd7e8390aa360425e4bf30` |
+| `modules/iam/provisioner/main.tf` | `c329e89dd94f57e8cd49b70f182f25ac2921b33e` |
+| `modules/iam/provisioner/outputs.tf` | `c27be4849b853de599a5efc5f2b42bdbc360eaf6` |
+| `modules/iam/provisioner/variables.tf` | `2f97ac56d0e810ff5cd9b7e256477e27b4bc54a2` |
