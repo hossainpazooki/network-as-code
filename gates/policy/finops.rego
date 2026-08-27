@@ -11,6 +11,9 @@ package main
 #           --combine mode. See that file for the full argument.
 # FIN-002 - Infracost budget delta (this file; per-file, one breakdown JSON
 #           is one input)
+# FIN-003 - breakdown integrity: the tool could not evaluate (this file)
+# FIN-004 - breakdown schema: the policy cannot read what the tool wrote
+#           (this file)
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -122,8 +125,10 @@ deny contains msg if {
 #     present on the failed one. Shape taken from infracost's own schema:
 #     []*ProjectDiag = {code, message, data, isError}, where code 102 is
 #     diagModuleEvaluationFailure (internal/schema/project.go).
-#   - projects[].summary.totalDetectedResources - 12, 14 and 14 on the
-#     successful runs; 0 on the failed one.
+#   - projects[].summary.totalDetectedResources - 99, 107 and 107 on the
+#     successful runs (re-read from the committed measured fixtures on
+#     2026-08-27; an earlier revision of this comment said 12/14/14, which
+#     is totalSupportedResources, a different field); 0 on the failed one.
 #
 # Each leg requires a key that the FIN-002 unit-test helper does not set, so
 # this rule cannot fire on the minimal {projects:[{name,breakdown}]} inputs
@@ -150,5 +155,49 @@ deny contains msg if {
 	msg := sprintf(
 		"FIN-003: Infracost breakdown for project %q detected zero resources - infracost exits 0 after a failed module load and reports $0.00, so this file would satisfy any budget ceiling",
 		[project.name],
+	)
+}
+
+# -----------------------------------------------------------------------------
+# FIN-004 - breakdown schema
+#
+# DENY when a file that carries a `projects` array - the signature of an
+# Infracost breakdown - contains NO project in the shape FIN-002 reads:
+# `projects[].name` together with `projects[].breakdown.totalMonthlyCost`.
+#
+# WHY. FIN-002 is bound to the Infracost v0.10.x JSON schema, and the binding
+# is invisible at the call site: nothing in this policy names a version.
+# Infracost v2 renamed both paths (`project_name`, `summary.total_monthly_cost`,
+# verified from source on 2026-08-26). Against a v2 breakdown FIN-002 does not
+# error - the reference is simply undefined, the deny body never binds, and
+# every cost is approved. The v0.10 CLI prints a banner offering that upgrade
+# as routine. So the failure mode is a green cost gate reading a file it cannot
+# see, triggered by a version bump; FIN-003 covers "the tool could not
+# evaluate", this covers "the policy cannot read what the tool wrote". Own ID,
+# because the cause and the fix are different.
+#
+# ANCHOR, stated as a limit: this keys on the `projects` key existing. A future
+# schema that renames `projects` itself would not be caught here. The committed
+# fixtures carry a `_provenance` block naming the generating version, which is
+# the human-readable half of the same pin.
+# -----------------------------------------------------------------------------
+
+fin004_expected_shape(p) if {
+	p.name
+	p.breakdown.totalMonthlyCost
+}
+
+fin004_first_project_keys := sort([k | some k, _ in input.projects[0]]) if {
+	count(input.projects) > 0
+} else := ["(no projects)"]
+
+deny contains msg if {
+	input.projects
+	matching := [p | some p in input.projects; fin004_expected_shape(p)]
+	count(matching) == 0
+
+	msg := sprintf(
+		"FIN-004: no project in this Infracost breakdown has the shape FIN-002 reads (projects[].name + projects[].breakdown.totalMonthlyCost, the v0.10.x schema) - %d project(s) present, keys of the first: %v - an unrecognised schema would otherwise match nothing and approve every cost",
+		[count(input.projects), fin004_first_project_keys],
 	)
 }

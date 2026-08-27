@@ -141,7 +141,7 @@ mode and vice versa.** They are separate conftest invocations with separate
 policy directories:
 
 - `policy/` - per-file rules (SEC-001, SEC-002, SEC-002-DRIFT, OBS-001,
-  OBS-002, FIN-002, FIN-003)
+  OBS-002, FIN-002, FIN-003, FIN-004)
 - `policy/combined/` - cross-file rules (SEC-003, and FIN-001)
 
 `run.sh` and CI must keep these two invocations distinct.

@@ -223,3 +223,75 @@ test_fin003_is_what_catches_the_zero_cost_trap if {
 	count(fin002_only(r)) == 0
 	count(fin003_only(r)) > 0
 }
+
+# =============================================================================
+# FIN-004 - breakdown schema
+#
+# FIN-002 reads v0.10.x paths. Infracost v2 renamed them, and against a v2
+# breakdown FIN-002 binds nothing and approves everything. FIN-004 refuses a
+# breakdown in which no project has the expected shape. Scoped to its own
+# prefix, like every family here.
+# =============================================================================
+
+fin004_only(msgs) := {m | some m in msgs; startswith(m, "FIN-004:")}
+
+# The v2 shape as read from infracost/cli source on 2026-08-26.
+fin004_v2_doc := {"projects": [{
+	"project_name": "dev",
+	"breakdown": {"resources": []},
+	"summary": {"total_monthly_cost": "594.416", "total_detected_resources": 99},
+}]}
+
+test_fin004_v2_schema_is_denied if {
+	r := deny with input as fin004_v2_doc
+	count(fin004_only(r)) == 1
+	some msg in fin004_only(r)
+	contains(msg, "project_name")
+}
+
+# THE TRAP, stated as a test: FIN-002 alone ACCEPTS a v2 breakdown. FIN-004 is
+# what refuses it. If FIN-002 ever grew a v2 reader this would fail, and the
+# rule's justification would need rewriting - which is the right outcome.
+test_fin004_is_what_catches_the_silent_upgrade if {
+	r := deny with input as fin004_v2_doc
+	count(fin002_only(r)) == 0
+	count(fin003_only(r)) == 0
+	count(fin004_only(r)) == 1
+}
+
+test_fin004_empty_projects_is_denied if {
+	r := deny with input as {"projects": []}
+	count(fin004_only(r)) == 1
+	some msg in fin004_only(r)
+	contains(msg, "(no projects)")
+}
+
+# One matching project among unrecognised ones is enough: the rule refuses
+# "nothing readable", not "something unreadable".
+test_fin004_one_matching_project_passes if {
+	r := deny with input as {"projects": [
+		{"project_name": "stale", "summary": {"total_monthly_cost": "1"}},
+		{"name": "dev", "breakdown": {"totalMonthlyCost": "594.416"}},
+	]}
+	count(fin004_only(r)) == 0
+}
+
+# --- FIN-004 must not leak into the other FIN rules' inputs -----------------
+
+test_fin004_does_not_fire_on_fin002_minimal_input if {
+	r := deny with input as fin002_project("dev", "594.416")
+	count(fin004_only(r)) == 0
+}
+
+test_fin004_does_not_fire_on_fin003_broken_breakdown if {
+	r := deny with input as fin003_doc({"path": ".", "errors": [fin003_diag]}, 0)
+	count(fin004_only(r)) == 0
+}
+
+# A document with no `projects` key is not an Infracost breakdown, and FIN-004
+# has nothing to say about it. This is the rule's stated anchor and its stated
+# limit, asserted so a future "fire on everything" edit is visible.
+test_fin004_ignores_non_breakdown_json if {
+	r := deny with input as {"kind": "ConfigMap", "data": {}}
+	count(fin004_only(r)) == 0
+}

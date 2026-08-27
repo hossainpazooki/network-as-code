@@ -13,11 +13,11 @@ carried forward from the previous measurement. Nothing here is a projection.
 | Same gate in CI | all **6** jobs green, run `33081248574`, 2026-08-27 - over the 22-file tree at 13 findings | GitHub Actions, Ubuntu runner; log lines quoted below |
 | CI over the 31-file tree, 15 findings, measured fixtures | **not yet observed on a runner** - the state below is local until the next push reports | pending |
 | Previous CI state | 5 of the 6 gate steps had a job until 2026-08-27; all 5 green, run `33016125195`, 2026-08-26 | superseded, kept as the record |
-| Rego unit tests | 67 / 67 pass | `opa test policy tests` |
+| Rego unit tests | 74 / 74 pass | `opa test policy tests` |
 | Conforming fixtures accepted | 10 per-file + 4 combined sets (two of the per-file are measured Infracost breakdowns) | `./run.sh conforming` |
-| Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
-| Rule IDs with a refusing fixture | 9 / 9 | `./run.sh coverage`, and now in CI - the `coverage` job in run `33081248574` printed "every declared rule ID is exercised by a refusing fixture" |
-| Deny clauses load-bearing for a refusing fixture | 15 / 15 | `./run.sh coverage` clause pass - deleting any one clause must reduce some fixture's deny count. Confirmed on a runner: "all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped." |
+| Negative controls refused | 19 / 19 (15 per-file + 4 combined sets) | `./run.sh violations` |
+| Rule IDs with a refusing fixture | 10 / 10 | `./run.sh coverage`, and now in CI - the `coverage` job in run `33081248574` printed "every declared rule ID is exercised by a refusing fixture" |
+| Deny clauses load-bearing for a refusing fixture | 16 / 16 | `./run.sh coverage` clause pass - deleting any one clause must reduce some fixture's deny count. Confirmed on a runner: "all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped." |
 | Findings in vendored historical config | **15** (4 per-file + 11 combined); 13 until 2026-08-27, both deltas adjudicated true | `./run.sh historical`, exact-count assertion |
 | Vendored files provenance-verified | 31 / 31 blob SHAs, and the tree holds exactly that set (22 until 2026-08-27) | `./run.sh verify-provenance` |
 
@@ -27,7 +27,7 @@ carried forward from the previous measurement. Nothing here is a projection.
 |---|---|---|---|
 | security | 4 - SEC-001, SEC-002, SEC-002-DRIFT, SEC-003 | 7 | refusing fixture for each ID (SEC-003 in combined mode), plus refusing unit tests |
 | observability | 2 - OBS-001, OBS-002 | 4 | refusing fixture for each ID (module form and bare-resource form) |
-| finops | 3 - FIN-001 (combined mode), FIN-002, FIN-003 | 4 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing **measured** fixture (`fixtures/violations/perfile/fin-infracost-dev-per-az-nat.json`, 660.116 against the dev ceiling 625.0) plus refusing unit tests. FIN-003: 1 refusing fixture (`fin-SYNTHETIC-infracost-broken-module-load.json`), which trips both clauses at once, plus unit tests asserting each clause fires alone |
+| finops | 4 - FIN-001 (combined mode), FIN-002, FIN-003, FIN-004 | 5 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing **measured** fixture (`fixtures/violations/perfile/fin-infracost-dev-per-az-nat.json`, 660.116 against the dev ceiling 625.0) plus refusing unit tests. FIN-003: 1 refusing fixture (`fin-SYNTHETIC-infracost-broken-module-load.json`, a hand-authored reconstruction of the observed failure), which trips both clauses at once, plus unit tests asserting each clause fires alone. FIN-004: 1 refusing fixture (`fin-SYNTHETIC-infracost-v2-schema.json`, hand-authored in the v2 shape), refused by FIN-004 alone |
 
 Every rule ID now has a negative control asserted by `./run.sh violations`, and
 the asymmetry that used to sit here is gone. FIN-002's over-budget fixture lived
@@ -312,6 +312,30 @@ ran against the completed root module and committed its output.
    *measured* baseline is refused under the old ceiling (`$594.42 exceeds
    $250.00`), which is the stale-ceiling claim demonstrated rather than stated.
 
+3. **FIN-004 - the schema guard, as its own rule.** FIN-002 reads v0.10 paths;
+   Infracost v2 renamed them, and against a v2 breakdown FIN-002 binds nothing
+   and approves everything, with the upgrade offered as routine by the v0.10
+   CLI's own banner. FIN-004 refuses a file that carries `projects` but no
+   project in the shape FIN-002 reads. A separate ID rather than a third
+   FIN-003 clause: different cause (tool version, not tool error), different
+   fix, own negative control - a hand-authored v2-shaped breakdown that
+   neither FIN-002 nor FIN-003 can reach, so it is refused by FIN-004 alone.
+   Seven unit tests, including one asserting FIN-002 *accepts* the v2 file,
+   so the trap stays stated. Two mutations, both quoted: delete the fixture
+   and `coverage` exits 1 naming `FIN-004`; delete the clause and
+   `violations` exits 1 with *"fin-SYNTHETIC-infracost-v2-schema.json was
+   ACCEPTED but must be refused"*. Honest footnote: it was the ID-level
+   coverage pass that caught the missing fixture, not the clause pass - for a
+   single-clause rule the two coincide, and the ID pass runs first. Stated
+   limit: FIN-004 keys on the `projects` key; a schema that renamed that too
+   would not be caught here.
+
+4. **A comment in `finops.rego` quoted the wrong field.** FIN-003's rationale
+   said `totalDetectedResources` was "12, 14 and 14" on the successful runs.
+   The committed measurements show 99 / 107 / 107; 12 / 14 / 14 is
+   `totalSupportedResources`. The rule was right, its documentation named the
+   wrong key. Corrected in place with the old figure kept and labelled.
+
 ## The 15 historical findings (13 until 2026-08-27)
 
 Against `gates/fixtures/historical/`, vendored from
@@ -376,8 +400,8 @@ file, and the now-closed ruling OQ-1.
   estimates.** Not "cost controlled", not "live": the prices are what the
   pricing API returned at that timestamp, nothing re-prices them, and CI never
   calls Infracost - it evaluates committed bytes with conftest and nothing else.
-  The remaining `SYNTHETIC-` file is the one hand-authored *failure-shape*
-  fixture (a broken module load), and says so inside.
+  The remaining `SYNTHETIC-` files are the two hand-authored *failure-shape*
+  fixtures (a broken module load; a v2-schema breakdown), and say so inside.
   `gates/fixtures/infracost/README.md` holds the generation/evaluation split and
   the regeneration procedure.
 

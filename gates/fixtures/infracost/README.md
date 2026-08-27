@@ -1,4 +1,4 @@
-# fixtures/infracost/ - FIN-002 / FIN-003 fixtures: what they are, how they were made
+# fixtures/infracost/ - FIN-002 / FIN-003 / FIN-004 fixtures: what they are, how they were made
 
 **No JSON lives here.** The breakdowns sit in the directories `run.sh` globs,
 because a fixture CI never reads is not a control. This directory holds the
@@ -10,6 +10,7 @@ procedure and the provenance story.
 | dev, one NAT per AZ (`single_nat_gateway` overridden to false), **660.116** | `fixtures/violations/perfile/fin-infracost-dev-per-az-nat.json` | **measured** | `./run.sh violations` - must be REFUSED by FIN-002 |
 | prod, as shipped, **853.404** | `fixtures/conforming/perfile/fin-infracost-prod.json` | **measured** | `./run.sh conforming` - must PASS under prod 900.0 |
 | failed module load, `totalMonthlyCost` "0", zero resources | `fixtures/violations/perfile/fin-SYNTHETIC-infracost-broken-module-load.json` | hand-authored reconstruction | `./run.sh violations` - must be REFUSED by FIN-003 |
+| Infracost v2 output shape (`project_name`, `summary.total_monthly_cost`) | `fixtures/violations/perfile/fin-SYNTHETIC-infracost-v2-schema.json` | hand-authored | `./run.sh violations` - must be REFUSED by FIN-004, and by FIN-004 alone |
 
 ## What "measured" means here, and what it does not
 
@@ -54,8 +55,8 @@ in this repository or its CI.
   exception to the no-additions rule, recorded in `STATUS.md`).
 - **The schema is version-bound and the binding is invisible.** FIN-002 reads
   v0.10 paths; v2 renamed them, against which FIN-002 binds nothing and approves
-  everything. The `_provenance.tool` field in each measured file is the pin;
-  a policy-side guard is the next change (see `STATUS.md`).
+  everything. FIN-004 refuses a breakdown with no readable project. The
+  `_provenance.tool` field is the human-readable half of the same pin.
 
 ## Regenerating
 

@@ -1,0 +1,33 @@
+{
+  "_synthetic": "VIOLATION FIXTURE - must be REFUSED by ./run.sh violations, and by FIN-004 alone. HAND-AUTHORED in the Infracost v2.x output shape, which this repo has never run (v0.10.45 is the pinned generator; the v2 key names were read from the infracost/cli source on 2026-08-26 - see docs/learnings/2026-08-26-infracost-v2-renamed-the-breakdown-schema.md). The numbers are copied from the real v0.10.45 dev single-NAT measurement so that the ONLY thing wrong with this file is its schema: no project has `name` or `breakdown.totalMonthlyCost`, so FIN-002 matches nothing and would approve it, and FIN-003's keys (`metadata.errors`, `summary.totalDetectedResources`) are absent too. If FIN-004 were deleted, this file would be ACCEPTED - which is exactly the silent-upgrade failure it exists to keep refused.",
+  "version": "2.0",
+  "currency": "USD",
+  "projects": [
+    {
+      "project_name": "dev",
+      "metadata": {
+        "path": "terraform",
+        "type": "terraform_dir"
+      },
+      "breakdown": {
+        "resources": [
+          {
+            "name": "module.eks.aws_eks_cluster.this[0]",
+            "resource_type": "aws_eks_cluster",
+            "monthly_cost": "73"
+          }
+        ]
+      },
+      "summary": {
+        "total_monthly_cost": "594.416",
+        "total_detected_resources": 99,
+        "total_supported_resources": 65
+      }
+    }
+  ],
+  "summary": {
+    "total_monthly_cost": "594.416",
+    "total_detected_resources": 99
+  },
+  "time_generated": "2026-08-27T14:50:12Z"
+}
