@@ -1,23 +1,31 @@
 # network-as-code
 
-I designed and operated an AWS platform — EKS, VPC, NAT, ElastiCache, RDS,
-Secrets Manager — and then decommissioned it, verifying the teardown by probing
-the AWS API afterwards rather than trusting the apply log: `terraform state
-list` returned 0 resources, and every cluster, subnet, gateway, secret, log
-group and IAM role was individually checked gone on 2026-08-03.
+**What this is.** A CI gate for infrastructure-as-code. It reads Terraform and
+Kubernetes files, applies security, observability and cost rules written in
+OPA Rego, and fails the build — and blocks the merge — when a rule is violated.
+No cloud credentials, no `terraform plan`, no spend: files in, verdict out.
 
-The retrospective finding was an enforcement gap. The platform had scanning;
-it did not have refusal. Its Checkov steps ended in `|| true`, so every
-finding produced an artifact and a green check — a detective control dressed
-as a preventive one. This repo is the control that was missing, built to the
-standard I would want to inherit in production: **a gate that cannot fail is
-not a gate, so every rule here ships with proof that it refuses.**
+**Where it came from.** I defined an AWS platform end to end in Terraform —
+EKS, VPC, NAT, RDS, ElastiCache, Secrets Manager, IAM — ran it, and destroyed
+it through Terraform, checking each resource gone against the AWS API on
+2026-08-03 rather than trusting the apply log (`terraform state list` → 0).
+The retrospective found one gap. The platform had a scanner, but the scanner
+could never fail a build: its steps ended in `|| true`, the shell idiom for
+"ignore the exit code", so every finding produced a report and a green tick.
+Scanning without refusal. This repo is the control that was missing.
+
+**What it proves, and how.** Three things, each with evidence you can re-run:
+the gate fails closed, even when a tool errors rather than refuses; every
+rule ships with a fixture the gate *must* refuse, and the build goes red if a
+rule stops refusing; and the rules are measured against the real, pinned
+configuration of the platform I ran — 15 findings, asserted as an exact count.
+The standard throughout: **a gate that cannot fail is not a gate.**
 
 ```mermaid
 flowchart LR
-    A["Operated the platform"] --> B["Destroy verified: state list = 0"]
-    B --> C["Retro: scanning ended in || true"]
-    C --> D["This repo: the missing control"]
+    A["Platform defined and run in Terraform"] --> B["Destroyed via Terraform; each resource checked gone via the AWS API"]
+    B --> C["Retro: scanner ended in || true, could never fail a build"]
+    C --> D["This repo: a gate that refuses, and blocks the merge"]
 ```
 
 ## See it refuse (30 seconds)
@@ -29,84 +37,118 @@ FAIL - fixtures/violations/perfile/netpol-wide-ipblock.yaml - main - SEC-002:
 egress ipBlock 10.0.0.0/8 is broader than the declared VPC CIDR 10.0.0.0/16
 (NetworkPolicy egress-wide-demo, egress[0].to[0])
 
-15 tests, 14 passed, 0 warnings, 1 failure, 0 exceptions
+16 tests, 15 passed, 0 warnings, 1 failure, 0 exceptions
 conftest exit code: 1 (non-zero = refused)
 ```
 
-The full build is `./run.sh gate`: provenance, unit tests, conforming
-fixtures, refusals, coverage, self-audit. Each of those six steps runs as its
-own job in GitHub Actions on every push and pull request, with the
-conftest/OPA binaries sha256-verified against the publishers' checksums before
-execution. Zero credentials, zero cloud spend, in CI or anywhere else: nothing
-here calls AWS.
+The full build is `./run.sh gate`: provenance check, unit tests, conforming
+fixtures, refusals, coverage, self-audit. Each of those six steps is its own
+job in GitHub Actions on every push and pull request; the conftest/OPA binaries
+are sha256-verified against the publishers' checksums before they run.
+
+## See it block a merge
+
+`master` requires all six jobs to pass, with no bypass for anyone, the owner
+included. [PR #1](https://github.com/hossainpazooki/network-as-code/pull/1)
+adds one file — a security group open to `0.0.0.0/0` — to the set of fixtures
+the `conforming` job asserts must pass. **The violating file turned exactly
+the job that reads it red**: `conforming` fails with the SEC-001 message
+naming the file, GitHub's API reports `mergeStateStatus: BLOCKED`, and the PR
+stays open and unmerged as the standing artifact. The claim is no broader
+than that: the two jobs that passed run before `conforming` and never read
+that directory, and the three after it were skipped. `STATUS.md` records the
+job log and the API state as of that run.
 
 ## Three properties, and how each one is proven
 
 **1 — Fail closed, including against the tools themselves.** No `|| true` or
 `continue-on-error` anywhere in the workflow — the rule exists because I
-shipped the opposite once. Less obviously: a tool error is never counted as a
-refusal. `conftest` exits 1 both when a policy refuses and when it cannot
-parse the input, so the harness counts actual deny messages. The same defect
-class appeared twice more and each time became a rule: Infracost exits 0 on a
-failed parse and reports a total of $0.00 — under every budget ceiling — so
-FIN-003 refuses any cost breakdown carrying evaluation errors or zero detected
-resources. Tools report "I could not evaluate this" through the same channel
-as "this is fine"; the gate treats the two differently.
+shipped the opposite once. Less obviously: a tool *error* is never counted as
+a refusal. `conftest` exits 1 both when a policy refuses and when it cannot
+parse the input, so the harness ignores the exit code and counts the deny
+messages themselves. The same defect appeared twice more, in Infracost, and
+each time became a rule: it exits 0 after a failed parse and reports a total
+of $0.00 — under every budget ceiling — so FIN-003 refuses any breakdown
+carrying evaluation errors or zero detected resources; and its v2 release
+renamed the JSON keys FIN-002 reads, against which the rule would bind nothing
+and approve everything, so FIN-004 refuses a breakdown with no project in the
+shape the policy can read. Tools report "I could not evaluate this" through
+the same channel as "this is fine"; the gate treats the two differently.
 
 ```mermaid
 flowchart TD
-    A["conftest exits 1"] --> B{"Policy refused, or input unreadable?"}
-    B -->|exit code says the same thing either way| C["Harness counts deny messages instead"]
-    C --> D["Denies present: a real refusal"]
-    C --> E["Zero denies, tool errored: build FAILS"]
-    E --> F["Never scored as 'no findings'"]
-
-    G["infracost exits 0"] --> H{"Costs nothing, or priced nothing?"}
-    H -->|total reads $0.00, under every ceiling| I["FIN-003 refuses the breakdown"]
+    subgraph amb["The ambiguity: one exit code, two meanings"]
+        A["conftest exits 1"] --- A1["policy refused"]
+        A --- A2["input unreadable"]
+        B["infracost exits 0"] --- B1["priced the module: 594.42"]
+        B --- B2["loaded nothing: 0.00"]
+    end
+    subgraph gate["What the gate does instead"]
+        C["Count deny messages; never trust the exit code"]
+        C -->|denies present| D["Refused"]
+        C -->|zero denies, tool errored| E["Build FAILS, never 'no findings'"]
+        F["FIN-003 refuses: errors or zero resources"]
+    end
+    A2 -.-> C
+    B2 -.-> F
 ```
 
 **2 — Every control has a negative control.** You test a pager by firing it.
-Each of the 9 rule IDs has at least one fixture the gate must refuse — 18 in
+Each of the 10 rule IDs has at least one fixture the gate must refuse — 19 in
 all, asserted refused on every run — and coverage goes one level deeper: for
-each of the 15 deny clauses, the check deletes that clause and asserts some
-refusing fixture's deny count drops. A clause whose deletion changes nothing
-has no evidence behind it, and the build goes red. Rules that find nothing in
-my config (SEC-001: no `0.0.0.0/0` anywhere) are proven live this way, not
-assumed dead.
+each of the 16 deny clauses, the check deletes that clause, re-runs the
+fixtures, and asserts some fixture's deny count drops. A clause whose deletion
+changes nothing has no evidence behind it, and the build goes red. Rules that
+find nothing in my config (SEC-001: no `0.0.0.0/0` anywhere) are proven live
+this way, not assumed dead.
 
 ```mermaid
 flowchart TD
-    A["9 rule IDs"] --> B["18 refusing fixtures, asserted in CI"]
-    B --> C["15 deny clauses"]
-    C --> D["Delete clause N"]
-    D --> E["Re-run the violation fixtures"]
-    E --> F{"Some fixture's deny count drops?"}
-    F -->|yes| G["Clause is load-bearing"]
-    F -->|no| H["No evidence behind it: RED"]
+    A["10 rule IDs"] --> B["19 fixtures the gate must refuse, asserted in CI"]
+    B --> C["16 deny clauses"]
+    C --> D["Delete one clause, re-run the 19 fixtures"]
+    D --> E{"Did some fixture lose a finding?"}
+    E -->|yes| F["Clause is load-bearing; next clause"]
+    E -->|no| G["Clause has no evidence: build RED"]
 ```
 
-**3 — Evidence over assertion.** The decommissioned platform's configuration
-is vendored read-only under `gates/fixtures/historical/`, pinned file-by-file
-by git blob SHA and never edited — the violations in it are the measurement.
-`./run.sh historical` runs all three rule families against it and asserts an
-**exact** finding count (13), so a rule that silently stops firing fails the
-build as loudly as a new finding does:
+**3 — Evidence over assertion, and Terraform evaluated as Terraform.** The
+decommissioned platform's configuration is vendored read-only under
+`gates/fixtures/historical/`: a complete Terraform root module — 31 files,
+including the local `modules/iam/*` it sources — plus its Kubernetes manifests,
+pinned file-by-file by git blob SHA and never edited. The violations in it are
+the measurement. `./run.sh historical` runs all three rule families against it
+and asserts an **exact** finding count (15), so a rule that silently stops
+firing fails the build as loudly as a new finding does.
 
 ```mermaid
 flowchart LR
-    A["Monorepo at 95df6ef"] --> B["22 files vendored, read-only"]
-    B --> C["Blob-SHA ledger, tree-exactness"]
+    A["Source repo at commit 95df6ef"] --> B["31 files vendored, read-only"]
+    B --> C["Every file pinned by blob SHA; tree must hold exactly those 31"]
     C --> D["3 rule families run against it"]
-    D --> E["Exact count: 13"]
-    E --> F["Drift in either direction: RED"]
+    D --> E["15 findings, asserted exactly"]
+    E --> F["14 or 16: build RED"]
 ```
 
 | Rule | Findings | What it says about the platform I ran |
 |---|---|---|
-| FIN-001 allocation tags | 8 | `App` missing on 8 resources — cost-per-app was unanswerable |
+| FIN-001 allocation tags | 10 | `App` missing on 10 resources, IAM roles included — cost-per-app was unanswerable |
 | OBS-001 flow logs | 1 | the VPC shipped without flow logs |
 | SEC-002 egress vs VPC CIDR | 3 | egress policies broader than the network they lived in |
 | SEC-003 no default-deny ingress | 1 | egress-only NetworkPolicies, ingress open by omission |
+
+The FIN-001 line is the repo's best Terraform story. The rule was wrong until
+it learned how Terraform actually behaves: it ran per file, and reported
+`Environment` missing on eight resources whose provider block — with
+`default_tags` — sat in `versions.tf`. In Terraform, `default_tags` is a
+property of the provider configuration and applies to the whole root module,
+child modules included when they declare no provider of their own; which file
+a resource is written in means nothing. So the gate now evaluates the root
+module as one unit (`--combine`), credits the union of every `default_tags`
+block it finds, and the findings became true — the count did not move, the
+messages did. That is the line separating this gate from a per-file linter,
+and it is also why the nine `modules/iam/*` files had to be vendored: an
+incomplete root module is an incomplete measurement.
 
 Claims about this repo follow the same discipline: `STATUS.md` is the claim
 ceiling — every number in it comes from a dated run, and anything not yet true
@@ -114,66 +156,78 @@ sits in its "Not yet" section by name.
 
 ## The correction log is the point, not an embarrassment
 
-`STATUS.md` records what adversarial review and first real tool runs changed,
+`STATUS.md` records what adversarial review and real tool runs changed,
 postmortem-style. Three worth a leader's minute:
 
-- **FIN-001 reported findings that were false.** Terraform's provider-level
-  `default_tags` applies to the whole root module; a per-file rule couldn't
-  see it and flagged `Environment` as missing when it wasn't. Fixed by moving
-  the rule to cross-file evaluation — because a gate that emits untrue
-  findings teaches its users to ignore it, and gate adoption is a trust
-  problem before it is a policy problem. The finding count didn't move; the
-  messages became true.
 - **CI was red for a day and the docs couldn't have told you.** A Windows
   filemode quirk shipped `run.sh` non-executable; the first job died in 13
   seconds and the policy jobs were skipped. The fix is one line; the lesson —
   "the gate works" rested on local runs until a runner proved it — is in the
-  log.
+  log. It recurred one level up: a gate step ran for three days with no CI
+  job at all, while four documents said otherwise.
 - **The provenance check verified the ledger, not the tree.** A stray tool
   cache wrote 822 files *into* the evidence directory and "22 files verified"
   still printed. Caught because the finding count moved. The check now asserts
   the tree contains exactly the recorded set, with a mutation test proving it
   fails on one added file.
+- **The cost ceilings were guesses.** `budget.json` said dev = 250 while the
+  first real Infracost run measured the shipped topology at 594. The ceilings
+  are now derived from measurements — and the measurement's own timestamp,
+  not the session brief, is what the record dates it by.
+
+These controls were built with AI assistance, held to the regime the artifact
+itself enforces: every claim refuted before it was written down, every guard
+mutation-proven red and green, every misfire ledgered. `STATUS.md` is the
+evidence, not this sentence.
 
 ## What this is, and is not
 
-A CI policy gate over declarative files — Terraform and Kubernetes manifests —
-with three rule families: security, observability, FinOps. OPA/Rego under
-conftest, which is the portable part: the same policies attach to Jenkins or
+A CI policy gate over Terraform and Kubernetes manifests, three rule families:
+security, observability, FinOps. It parses HCL directly and evaluates
+root-module semantics with **no `terraform init`, `plan` or `apply`** — and
+therefore no credentials, which is why it runs anywhere, CI included, at zero
+spend. Cost gating reads Infracost's HCL-mode breakdown of the same root
+module, priced without a plan file: generated once, locally, with an Infracost
+API key and no AWS credential, committed with its provenance, and evaluated in
+CI as bytes. The claim that supports is *cost-delta gating demonstrated on
+pinned point-in-time estimates* — the shipped topology passes its ceiling, the
+per-AZ-NAT variant is refused — not "cost controlled", not "live". OPA/Rego
+under conftest is the portable part: the same policies attach to Jenkins or
 Spinnaker pipelines the same way they attach to GitHub Actions here.
 
 ```mermaid
 flowchart LR
-    A["Proposed .tf and .yaml"] --> B["Per-file conftest"]
-    A --> C["Combined conftest (--combine)"]
-    B --> D{"Any deny?"}
-    C --> D
-    D -->|yes| E["REFUSE, named finding"]
-    D -->|no| F["PASS"]
-    B -.->|same policies attach| G["Jenkins, Spinnaker"]
-    D -.->|out of scope| H["Anything already running"]
+    subgraph gen["Generated once, locally: Infracost API key, no AWS credential"]
+        I["infracost breakdown, HCL mode"] --> J["breakdown JSON + provenance"]
+    end
+    subgraph ci["Evaluated in CI: no credential, no network"]
+        A["Proposed .tf / .yaml / .json"] --> B["conftest per file"]
+        A --> C["conftest over the root module (--combine)"]
+        B --> D{"Any deny?"}
+        C --> D
+        D -->|yes| E["REFUSE: build red, merge blocked"]
+        D -->|no| F["PASS"]
+    end
+    J -.->|committed to the repo| A
+    D -.->|never touched| H["Anything already running"]
 ```
 
 Not claimed, deliberately: nothing running is enforced (this gates files, not
-clusters); the committed Infracost figures are synthetic and marked as such —
-real breakdowns were run locally on 2026-08-26 and deliberately not committed
-pending re-derived ceilings (`STATUS.md` records the measured numbers and the
-adoption plan); and the gate has refused in CI but has not yet blocked a pull
-request from merging — the demonstration PR is the next artifact.
-<!-- UPGRADE 1, after refusal-PR evidence exists: replace the last clause with
-     "and here is the gate blocking a merge: PR #N — the conforming corpus
-     check goes red on a deliberate violation while merging is blocked." -->
-CI is green across all six jobs: run
-[`33081248574`](https://github.com/hossainpazooki/network-as-code/actions/runs/33081248574)
-evaluated every rule on Linux, refused all 18 negative controls, proved all 15
-deny clauses load-bearing, and reproduced the 13 historical findings exactly.
-`STATUS.md` quotes the log lines rather than the check mark.
+clusters, and no Terraform is authored or applied here); live plan/apply gating
+is not built; and the committed cost figures are point-in-time estimates from
+one dated run, not a statement about what anything costs now.
+
+CI is green across all six jobs on this tree: run
+[`33089563447`](https://github.com/hossainpazooki/network-as-code/actions/runs/33089563447)
+verified 31 files against the ledger, refused all 19 negative controls, proved
+all 16 deny clauses load-bearing, and reproduced the 15 historical findings
+exactly. `STATUS.md` quotes the log lines rather than the check mark.
 
 ## Layout
 
 ```
 gates/policy/              per-file rules        gates/tests/       unit tests, per family
-gates/policy/combined/     cross-file rules      gates/fixtures/    historical (pinned) /
-gates/policy/budget.json   FIN ceilings                             conforming / violations
-gates/run.sh               every target CI runs  STATUS.md          the claim ceiling
+gates/policy/combined/     root-module rules     gates/fixtures/    historical (31, pinned) /
+gates/policy/budget.json   FIN ceilings, derived                    conforming / violations
+gates/run.sh               every gate step CI runs   STATUS.md      the claim ceiling
 ```
