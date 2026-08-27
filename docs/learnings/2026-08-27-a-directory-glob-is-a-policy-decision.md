@@ -1,0 +1,16 @@
+# A directory glob is a policy decision, and two globs make two policies
+
+ts: 2026-08-27T15:10:00Z
+commit: (none - uncommitted at capture time; repo HEAD 136f46f predates it)
+session: https://claude.ai/code/session_014VvchHADG6EdNs3w8JrKY6
+status: verified
+fact: When a corpus is defined by "whatever is under this path", adding a subdirectory changes the corpus without anyone deciding it should - and when the same corpus is walked by two different invocations with two different path arguments, the addition can enter one and not the other. `conftest test <dir>` recurses, so a per-file loop over `fixtures/historical` picks up a new `modules/` sibling on its own; `conftest test --combine fixtures/historical/terraform` does not, because it was handed a subtree. The two loops then evaluate two different corpora while every document calls them one. Nothing errors. The finding count moves in one loop only, and a reader who trusts the count has no way to see that the definition split.
+basis: on 2026-08-27 nine `modules/iam/**` files were vendored beside `terraform/` and `kube/` to complete the root module `terraform/iam.tf` sources. Before they landed, the two historical loops in `gates/run.sh` were inspected: the per-file loop (`conftest test "$HIST"`) would include the new files automatically; the terraform-combined loop (`--combine "$HIST/terraform"`) would not. That would have been an accident, not a ruling, so it was surfaced as fork F4 and ruled (a): both loops, and the combined set became `--combine "$HIST/terraform" "$HIST/modules"` in ONE invocation. The one-invocation part is load-bearing, and was proven rather than argued: running `--combine fixtures/historical/modules` ALONE reports `Environment, App` missing on `aws_iam_role.builder` and `.provisioner`; running it together with `terraform/` reports `App` only. `Environment` is not missing - the child modules declare no provider and inherit the root's `default_tags` from `versions.tf` - so the modules-alone run emits a false finding, of exactly the kind FIN-001 was rebuilt on 2026-08-24 to stop emitting. The count moved 13 -> 15 with both deltas adjudicated true before the number was pinned.
+re-verify: cd gates && printf 'modules ALONE : ' && ../.tools/conftest.exe test --combine fixtures/historical/modules --policy policy/combined --data policy --all-namespaces -o json 2>/dev/null | python -c "import json,sys; print(sorted({m['msg'].split(' - ')[0].split('tag(s) ')[1] for r in json.load(sys.stdin) for m in (r.get('failures') or [])}))"; printf 'with terraform: ' && ../.tools/conftest.exe test --combine fixtures/historical/terraform fixtures/historical/modules --policy policy/combined --data policy --all-namespaces -o json 2>/dev/null | python -c "import json,sys; print(sorted({m['msg'].split(' - ')[0].split('tag(s) ')[1] for r in json.load(sys.stdin) for m in (r.get('failures') or []) if 'aws_iam_role' in m['msg']}))"
+
+The generalisation: a path argument is a corpus definition, and every corpus
+definition is a claim about what the evidence IS. Two invocations over "the
+same" evidence must be shown to walk the same file set, or the count they
+produce is a count over two things wearing one name. Related:
+[[2026-08-25-terraform-default-tags-is-provider-wide]] - the same inheritance
+fact, seen this time from the module side.

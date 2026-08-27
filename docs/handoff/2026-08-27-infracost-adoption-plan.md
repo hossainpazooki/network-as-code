@@ -1,9 +1,15 @@
-# Infracost adoption - PROPOSED, nothing below is built
+# Infracost adoption - EXECUTED 2026-08-27 (historical document)
 
-Status: **PROPOSED 2026-08-27.** No step here has been executed. Nothing in
-`STATUS.md` claims any of it. **F2 and F3 were ruled on by the author on
-2026-08-27 and are closed** - see below. Step 1 is unblocked; nothing was
-started, because execution is a separate session's work.
+Status: **EXECUTED 2026-08-27**, all four steps, in this order, by the session
+that followed the one that wrote it. `STATUS.md` is the record of what landed
+and what was measured; this file is kept as the contract the work was held
+to. Deviations from it, stated: (1) a third measured fixture, prod, was
+committed alongside the two the plan named, because a third measurement with
+nowhere honest to live is worse than one more conforming fixture; (2) the
+schema guard shipped as **FIN-004**, a separate ID, rather than a third
+FIN-003 clause - different cause (tool version, not tool error), different
+fix, own negative control; (3) F4, a fork this plan did not foresee, was
+surfaced and ruled before the count moved - see `STATUS.md`.
 
 Claim ceiling for the whole of this, fixed in advance so no step can drift past
 it: **"cost-delta gating demonstrated on pinned point-in-time estimates."**
