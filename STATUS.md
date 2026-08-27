@@ -10,13 +10,13 @@ carried forward from the previous measurement. Nothing here is a projection.
 | Fact | Value | How it was measured |
 |---|---|---|
 | Gate result | `GATE GREEN`, exit 0 | `./run.sh gate` |
-| Same gate in CI | 5 of the 6 gate steps had a job until 2026-08-27; all 5 green, run `33016125195`, 2026-08-26 | GitHub Actions, Ubuntu runner |
-| `coverage` job in CI | added 2026-08-27; not yet observed green on a runner | `.github/workflows/gate.yml` |
+| Same gate in CI | all **6** jobs green, run `33081248574`, 2026-08-27 | GitHub Actions, Ubuntu runner; log lines quoted below |
+| Previous CI state | 5 of the 6 gate steps had a job until 2026-08-27; all 5 green, run `33016125195`, 2026-08-26 | superseded, kept as the record |
 | Rego unit tests | 66 / 66 pass | `opa test policy tests` |
 | Conforming fixtures accepted | 9 per-file + 4 combined sets | `./run.sh conforming` |
 | Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
-| Rule IDs with a refusing fixture | 9 / 9 | `./run.sh coverage`, local. The fixtures themselves are refused in CI by the `violations` job; the assertion that every ID has one got its own CI job on 2026-08-27 and has not yet run on a runner |
-| Deny clauses load-bearing for a refusing fixture | 15 / 15 | `./run.sh coverage`, clause pass — deleting any one clause must reduce some fixture's deny count |
+| Rule IDs with a refusing fixture | 9 / 9 | `./run.sh coverage`, and now in CI - the `coverage` job in run `33081248574` printed "every declared rule ID is exercised by a refusing fixture" |
+| Deny clauses load-bearing for a refusing fixture | 15 / 15 | `./run.sh coverage` clause pass - deleting any one clause must reduce some fixture's deny count. Confirmed on a runner: "all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped." |
 | Findings in vendored historical config | **13** (4 per-file + 9 combined) | `./run.sh historical`, exact-count assertion |
 | Vendored files provenance-verified | 22 / 22 blob SHAs, and the tree holds exactly that set | `./run.sh verify-provenance` |
 
@@ -94,6 +94,19 @@ Proven by two mutations, both run:
 Cost: the `gate` chain went from ~6s to ~14s on Windows. Nothing is
 short-circuited or sampled, locally or in CI, and the target says so in its own
 output.
+
+**Confirmed on Linux, not only locally.** Run `33081248574` on 2026-08-27 is
+the first with all six jobs. Extracted from its log rather than read off the
+check mark:
+
+```
+verify-provenance   22 files verified against PROVENANCE.md, and the tree contains exactly that set.
+unit                PASS: 66/66
+violations          14 per-file + 4 combined = 18 negative controls, all refused.
+coverage            every declared rule ID is exercised by a refusing fixture.
+coverage            all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped.
+historical          total : 13 (expected 13)
+```
 
 Three limits, stated rather than discovered later:
 
