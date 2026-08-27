@@ -10,10 +10,11 @@ carried forward from the previous measurement. Nothing here is a projection.
 | Fact | Value | How it was measured |
 |---|---|---|
 | Gate result | `GATE GREEN`, exit 0 | `./run.sh gate` |
-| Same gate in CI | all **6** jobs green, run `33081248574`, 2026-08-27 | GitHub Actions, Ubuntu runner; log lines quoted below |
+| Same gate in CI | all **6** jobs green, run `33081248574`, 2026-08-27 - over the 22-file tree at 13 findings | GitHub Actions, Ubuntu runner; log lines quoted below |
+| CI over the 31-file tree, 15 findings, measured fixtures | **not yet observed on a runner** - the state below is local until the next push reports | pending |
 | Previous CI state | 5 of the 6 gate steps had a job until 2026-08-27; all 5 green, run `33016125195`, 2026-08-26 | superseded, kept as the record |
-| Rego unit tests | 66 / 66 pass | `opa test policy tests` |
-| Conforming fixtures accepted | 9 per-file + 4 combined sets | `./run.sh conforming` |
+| Rego unit tests | 67 / 67 pass | `opa test policy tests` |
+| Conforming fixtures accepted | 10 per-file + 4 combined sets (two of the per-file are measured Infracost breakdowns) | `./run.sh conforming` |
 | Negative controls refused | 18 / 18 (14 per-file + 4 combined sets) | `./run.sh violations` |
 | Rule IDs with a refusing fixture | 9 / 9 | `./run.sh coverage`, and now in CI - the `coverage` job in run `33081248574` printed "every declared rule ID is exercised by a refusing fixture" |
 | Deny clauses load-bearing for a refusing fixture | 15 / 15 | `./run.sh coverage` clause pass - deleting any one clause must reduce some fixture's deny count. Confirmed on a runner: "all 15 deny clauses are load-bearing for a refusing fixture. Nothing skipped." |
@@ -26,7 +27,7 @@ carried forward from the previous measurement. Nothing here is a projection.
 |---|---|---|---|
 | security | 4 - SEC-001, SEC-002, SEC-002-DRIFT, SEC-003 | 7 | refusing fixture for each ID (SEC-003 in combined mode), plus refusing unit tests |
 | observability | 2 - OBS-001, OBS-002 | 4 | refusing fixture for each ID (module form and bare-resource form) |
-| finops | 3 - FIN-001 (combined mode), FIN-002, FIN-003 | 4 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing fixture (`fixtures/violations/perfile/fin-SYNTHETIC-infracost-per-az-nat.json`) plus refusing unit tests. FIN-003: 1 refusing fixture (`fin-SYNTHETIC-infracost-broken-module-load.json`), which trips both clauses at once, plus unit tests asserting each clause fires alone |
+| finops | 3 - FIN-001 (combined mode), FIN-002, FIN-003 | 4 | FIN-001: 3 refusing directory sets. FIN-002: 1 refusing **measured** fixture (`fixtures/violations/perfile/fin-infracost-dev-per-az-nat.json`, 660.116 against the dev ceiling 625.0) plus refusing unit tests. FIN-003: 1 refusing fixture (`fin-SYNTHETIC-infracost-broken-module-load.json`), which trips both clauses at once, plus unit tests asserting each clause fires alone |
 
 Every rule ID now has a negative control asserted by `./run.sh violations`, and
 the asymmetry that used to sit here is gone. FIN-002's over-budget fixture lived
@@ -284,6 +285,33 @@ next section, where every delta is adjudicated individually.
 spent. Any further addition to `gates/fixtures/historical/` is a hard
 violation, and `verify-provenance` fails on it by construction.
 
+## What running Infracost for the second time changed on 2026-08-27
+
+The first run (2026-08-26) found two defects and committed nothing. The second
+ran against the completed root module and committed its output.
+
+1. **Measured, and stable.** dev single-NAT **594.416**, dev per-AZ-NAT
+   **660.116**, prod **853.404** - identical to the 2026-08-26 figures to three
+   decimals, 99 / 107 / 107 resources detected, zero evaluation errors, all
+   three exit 0. Committed as `fin-infracost-dev-single-nat.json` (conforming),
+   `fin-infracost-dev-per-az-nat.json` (violation) and `fin-infracost-prod.json`
+   (conforming - a third measurement, given a home rather than discarded). The
+   two hand-authored NAT-only files they replace (221.33 / 287.03) are deleted,
+   not kept beside them. Generation happened on one machine with an Infracost
+   API key and no AWS credential; evaluation happens in CI with neither.
+
+2. **The ceilings are derived now, not guessed.** `budget.json` dev 250.0 ->
+   **625.0** (ruling F2: near the midpoint of (594.416, 660.116) - the shipped
+   topology passes with 5.1% headroom, the per-AZ topology is refused with 5.3%
+   margin, and neither verdict flips on ordinary price drift). prod stays
+   **900.0**, which is measured 853.404 plus 5.5%: the same number the file
+   carried as a placeholder, now with a derivation behind it. The embedded
+   fallback in `finops.rego` and the threshold unit tests moved with it.
+   Proven by mutation: reverting `budget.json` alone to 250 turns three tests
+   red - `test_fin002_embedded_budget_matches_budget_json` by name - and the
+   *measured* baseline is refused under the old ceiling (`$594.42 exceeds
+   $250.00`), which is the stale-ceiling claim demonstrated rather than stated.
+
 ## The 15 historical findings (13 until 2026-08-27)
 
 Against `gates/fixtures/historical/`, vendored from
@@ -338,46 +366,28 @@ file, and the now-closed ruling OQ-1.
   to `master` where every fixture was already in its expected state. The claim
   "here is the gate blocking a violation from merging" needs a PR whose check
   goes red on a deliberate violation, and no such PR exists yet.
-- **Infracost: path taken is local-run-committed-output** (commit the JSON, gate
-  the committed file - no API call in CI). **The committed fixtures are still
-  hand-authored and still not measurements.** Both keep their `SYNTHETIC-`
-  filename element and `_synthetic` marker key, and any dollar figure this repo
-  ships is illustrative. That is now a *decision*, not a limitation: on
-  2026-08-26 infracost v0.10.45 was installed and authenticated, and real
-  breakdowns were run. The output was deliberately **not** committed, so nothing
-  below is in the repo.
-
-  What those runs established, recorded here because it bears on claims made
-  above:
-
-  1. **The schema FIN-002 reads is correct.** `projects[].name` and
-     `projects[].breakdown.totalMonthlyCost` (a decimal *string*) were observed
-     in real v0.10.45 output. Note this is version-bound: infracost v2.x moved to
-     `projects[].project_name` and `summary.total_monthly_cost`, against which
-     FIN-002 would match nothing and silently approve every cost.
-  2. **`budget.json`'s ceilings no longer mean what they say.** dev = 250 and
-     prod = 900 were derived from the synthetic NAT-only figures (221.33 /
-     287.03). Measured reality, from a tree with the missing modules restored:
-     dev single-NAT **594.42**, dev per-AZ-NAT **660.12**, prod **853.40**. The
-     dev ceiling is therefore ~2.4x below its own baseline. Adopting real
-     fixtures requires re-deriving it (any value between 594.42 and 660.12
-     preserves the intent: single-NAT passes, per-AZ refuses). Prod's 900, long
-     labelled a placeholder, happens to sit 5.5% above measured prod.
-  3. **The evidence tree cannot reproduce those numbers.** `terraform/iam.tf`
-     sources `../modules/iam/{builder,pod,provisioner}` — nine files that exist
-     at ref `95df6ef` but sit one directory above the vendored subtree and were
-     never vendored. Without them infracost prices nothing.
-  4. **A failed parse is silent and exits 0**, which is what produced FIN-003
-     below. This is the finding that justified the day.
-
-  `gates/fixtures/infracost/README.md` holds the replacement procedure.
+- **Infracost: measured, committed, ceilings derived - claim ceiling unchanged.**
+  The three breakdown JSONs under `fixtures/` are real output of Infracost
+  v0.10.45, run once, locally, on 2026-08-27, against a copy of the completed
+  31-file root module (directory mode: no `terraform init/plan/apply`, no AWS
+  credentials). Each carries a `_provenance` block naming the command, the tool,
+  the input tree (ref `95df6ef` + the ledger's sha256) and the timestamp. What
+  may be claimed: **cost-delta gating demonstrated on pinned point-in-time
+  estimates.** Not "cost controlled", not "live": the prices are what the
+  pricing API returned at that timestamp, nothing re-prices them, and CI never
+  calls Infracost - it evaluates committed bytes with conftest and nothing else.
+  The remaining `SYNTHETIC-` file is the one hand-authored *failure-shape*
+  fixture (a broken module load), and says so inside.
+  `gates/fixtures/infracost/README.md` holds the generation/evaluation split and
+  the regeneration procedure.
 
 ### Not claimable, full stop
 
 Live `terraform plan` / `apply` gating. Enforcement of anything running.
 Flow-log aggregation or egress-GB-per-app reporting (not built). Cluster-side
-request interception (not built; this is a CI gate over files). Any real
-Infracost measurement.
+request interception (not built; this is a CI gate over files). Any claim that
+costs are controlled, current, or live: the committed breakdowns are
+point-in-time estimates from one dated run, evaluated as bytes.
 
 ## Open rulings, defaulted by the author
 

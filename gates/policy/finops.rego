@@ -55,7 +55,7 @@ package main
 # Fallback for a bare `conftest test` run with no `--data policy`. Gated
 # against policy/budget.json by a unit test - see note 2 above.
 fin002_embedded_budget := {
-	"dev": {"monthly_usd_max": 250.0},
+	"dev": {"monthly_usd_max": 625.0},
 	"prod": {"monthly_usd_max": 900.0},
 }
 

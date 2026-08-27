@@ -48,13 +48,16 @@ test_fin002_each_static_clause_resolves_to_its_budget_json_entry if {
 # -----------------------------------------------------------------------------
 # Threshold behaviour
 # -----------------------------------------------------------------------------
+# 594.416 is the measured single-NAT dev total (fixtures/conforming/perfile/
+# fin-infracost-dev-single-nat.json); 660.116 the measured per-AZ total. The
+# ceiling between them is 625.0 - see policy/budget.json for the derivation.
 test_fin002_dev_under_threshold_pass if {
-	r := deny with input as fin002_project("dev", "221.33")
+	r := deny with input as fin002_project("dev", "594.416")
 	count(fin002_only(r)) == 0
 }
 
 test_fin002_dev_over_threshold_denied if {
-	r := deny with input as fin002_project("dev", "287.03")
+	r := deny with input as fin002_project("dev", "660.116")
 	msgs := fin002_only(r)
 	count(msgs) == 1
 	some msg in msgs
@@ -79,13 +82,20 @@ test_fin002_unmapped_environment_not_evaluated if {
 }
 
 test_fin002_environment_match_is_case_insensitive if {
-	r := deny with input as fin002_project("DEV", "287.03")
+	r := deny with input as fin002_project("DEV", "660.116")
 	count(fin002_only(r)) == 1
+}
+
+test_fin002_prod_measured_total_is_under_threshold if {
+	# 853.404 measured (fixtures/conforming/perfile/fin-infracost-prod.json);
+	# 900.0 is that plus 5.5% headroom, no longer a placeholder.
+	r := deny with input as fin002_project("prod", "853.404")
+	count(fin002_only(r)) == 0
 }
 
 test_fin002_multiple_projects_each_evaluated if {
 	r := deny with input as {"projects": [
-		{"name": "dev", "breakdown": {"totalMonthlyCost": "221.33"}},
+		{"name": "dev", "breakdown": {"totalMonthlyCost": "594.416"}},
 		{"name": "prod", "breakdown": {"totalMonthlyCost": "1000.00"}},
 	]}
 	msgs := fin002_only(r)
@@ -98,17 +108,17 @@ test_fin002_multiple_projects_each_evaluated if {
 # data.<env> vs the embedded fallback
 # -----------------------------------------------------------------------------
 test_fin002_data_dev_is_authoritative_over_embedded if {
-	# $260 is refused under the embedded 250, but must pass once data.dev
+	# $700 is refused under the embedded 625, but must pass once data.dev
 	# raises the ceiling - so the static data reference is what enforces.
-	r := deny with input as fin002_project("dev", "260.00")
+	r := deny with input as fin002_project("dev", "700.00")
 		with data.dev as {"monthly_usd_max": 999.0}
 	count(fin002_only(r)) == 0
 }
 
 test_fin002_embedded_fallback_enforces_when_data_absent if {
 	# data.dev emptied models a bare `conftest test` with no --data flag.
-	# The embedded 250 must still refuse $260 rather than permit everything.
-	r := deny with input as fin002_project("dev", "260.00") with data.dev as {}
+	# The embedded 625 must still refuse $700 rather than permit everything.
+	r := deny with input as fin002_project("dev", "700.00") with data.dev as {}
 	count(fin002_only(r)) == 1
 }
 
@@ -196,7 +206,7 @@ test_fin003_empty_errors_array_passes if {
 # rather than assumed, because the coupling would be silent.
 
 test_fin003_does_not_fire_on_fin002_minimal_input if {
-	r := deny with input as fin002_project("dev", "221.33")
+	r := deny with input as fin002_project("dev", "594.416")
 	count(fin003_only(r)) == 0
 }
 
